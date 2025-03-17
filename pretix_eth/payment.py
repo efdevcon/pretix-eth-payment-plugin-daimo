@@ -99,15 +99,17 @@ class DaimoPay(BasePaymentProvider):
         print (f"checkout_confirm_render: creating Daimo Pay payment")  
         total = Decimal(request.session['total_usd'])
         print (f"checkout_confirm_render: order total: {total}")  
-        payment_id = None
-        try:
-            payment_id = self._create_daimo_pay_payment(total)
-        except Exception as e:
-            logger.error(f"Error in Daimo Pay API request: {str(e)}")
-            raise e
-
-        print(f"checkout_confirm_render: payment_id: {payment_id}")
-        request.session['payment_id'] = payment_id
+        payment_id = request.session['payment_id']
+        if not payment_id:
+            try:
+                payment_id = self._create_daimo_pay_payment(total)
+                print(f"checkout_confirm_render: new payment_id: {payment_id}")
+                request.session['payment_id'] = payment_id
+            except Exception as e:
+                logger.error(f"Error in Daimo Pay API request: {str(e)}")
+                raise e
+        else:
+            print(f"checkout_confirm_render: existing payment_id: {payment_id}")
 
         template = get_template("pretix_eth/checkout_payment_confirm.html")
         return template.render({ "payment_id": payment_id })
@@ -150,13 +152,26 @@ class DaimoPay(BasePaymentProvider):
     def execute_payment(self, request: HttpRequest, payment: OrderPayment):
         payment_id = request.session['payment_id']
         print(f"execute_payment: {payment_id}")
+        request.session['payment_id'] = ''
         self.confirm_payment_by_id(payment_id, payment)
 
     def confirm_payment_by_id(self, payment_id: str, payment: OrderPayment) -> None:
         # Ensure that it's paid
-        source_chain_id, source_tx_hash, dest_chain_id, dest_tx_hash = self._fetch_payment_by_id(payment_id)
-        print(f"confirm_payment_by_id: {payment_id}: source {source_chain_id}-{source_tx_hash}, dest {dest_chain_id}-{dest_tx_hash}")
-        if source_tx_hash != None:
+        n_tries = 5
+        for i in range(n_tries):
+            source_chain_id, source_tx_hash, dest_chain_id, dest_tx_hash = self._fetch_payment_by_id(payment_id)
+
+            # If the payment is not yet paid, sleep and retry with exponential backoff
+            if source_tx_hash == None:
+                if i == n_tries - 1:
+                    break
+                sleep_time = 2**i
+                print(f"confirm_payment_by_id: {payment_id}: not yet paid, sleeping {sleep_time} seconds")
+                time.sleep(sleep_time)
+                continue
+
+            # Finished, confirm the payment and exit
+            print(f"confirm_payment_by_id: {payment_id}: source {source_chain_id}-{source_tx_hash}, dest {dest_chain_id}-{dest_tx_hash}")
             payment.confirm()
             payment.info_data = {
                 "payment_id": payment_id,
@@ -168,9 +183,11 @@ class DaimoPay(BasePaymentProvider):
                 "time": int(time.time()),
             }
             payment.save(update_fields=["info"])
-        else:
-            print(f"execute_payment: {payment_id}: FAIL, not finished according to Daimo Pay API")
-            payment.fail()
+            return
+
+        print(f"execute_payment: {payment_id}: FAIL, not finished according to Daimo Pay API")
+        payment.fail()
+
 
     def _fetch_payment_by_id(self, payment_id: str):
         response = requests.get(
@@ -187,8 +204,8 @@ class DaimoPay(BasePaymentProvider):
         print(repr(data))
         source = data['source']
         dest = data['destination']
-        source_chain_id = source['chainId']
-        source_tx_hash = source['txHash']
+        source_chain_id = source and source['chainId']
+        source_tx_hash = source and source['txHash']
         dest_chain_id = dest['chainId']
         dest_tx_hash = dest['txHash']
         return source_chain_id, source_tx_hash, dest_chain_id, dest_tx_hash
