@@ -86,6 +86,10 @@ class DaimoPay(BasePaymentProvider):
     # No need to collect payment information.
     def payment_form_render(self, request, total):
         request.session['total_usd'] = str(total)
+        payment_id = self._create_daimo_pay_payment(total)
+        print(f"payment_form_render: total {total}, new payment_id {payment_id}")
+        request.session['payment_id'] = payment_id
+
         template = get_template('pretix_eth/checkout_payment_form.html')
         return template.render({})
     
@@ -98,24 +102,12 @@ class DaimoPay(BasePaymentProvider):
     def checkout_confirm_render(self, request):
         print (f"checkout_confirm_render: creating Daimo Pay payment")  
         total = Decimal(request.session['total_usd'])
-        print (f"checkout_confirm_render: order total: {total}")  
         payment_id = request.session['payment_id']
-        if not payment_id:
-            try:
-                payment_id = self._create_daimo_pay_payment(total)
-                print(f"checkout_confirm_render: new payment_id: {payment_id}")
-                request.session['payment_id'] = payment_id
-            except Exception as e:
-                logger.error(f"Error in Daimo Pay API request: {str(e)}")
-                raise e
-        else:
-            print(f"checkout_confirm_render: existing payment_id: {payment_id}")
-
+        print (f"checkout_confirm_render: total {total}, payment id {payment_id}")
         template = get_template("pretix_eth/checkout_payment_confirm.html")
         return template.render({ "payment_id": payment_id })
 
     def _create_daimo_pay_payment(self, total: Decimal) -> str:
-        # TODO: ideally set Idempotency-Key using the order code
         idempotency_key = str(uuid.uuid4())
 
         chain_op = 10
