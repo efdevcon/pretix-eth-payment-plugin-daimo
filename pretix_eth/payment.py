@@ -11,7 +11,7 @@ from django.http import HttpRequest
 from django.template.loader import get_template
 from django.utils.translation import gettext_lazy as _
 
-from pretix.base.models import OrderPayment, OrderRefund
+from pretix.base.models import OrderPayment, OrderRefund, Order
 from pretix.base.payment import BasePaymentProvider, PaymentProviderForm, PaymentException
 from pretix.base.services.mail import mail_send
 from web3 import Web3
@@ -82,11 +82,43 @@ class DaimoPay(BasePaymentProvider):
             super().is_allowed(request, **kwargs),
         ))
 
+    def _get_order_metadata(self, request) -> dict:
+        """Get metadata for order including attendee email from cart or order"""
+        attendee_email = None
+        
+        # Try to get from session cart
+        cart_id = request.session.get('current_cart_event_1')
+        if cart_id and 'carts' in request.session and cart_id in request.session['carts']:
+            cart = request.session['carts'][cart_id]
+            if 'email' in cart:
+                attendee_email = cart['email']
+        
+        # If not found, try to get from order
+        if not attendee_email:
+            try:
+                # Extract order_id from URL path
+                path = request.path
+                if '/order/' in path:
+                    order_id = path.split('/order/')[1].split('/')[0]
+                    order = Order.objects.get(code=order_id, event=self.event)
+                    attendee_email = order.email
+            except Exception as e:
+                logger.error(f"error fetching order email: {e}")
+
+        return {
+            "event_id": str(self.event.id),
+            "event_slug": str(self.event.slug),
+            "attendee_email": attendee_email or "",
+        }
+
     # Payment screen: just a message saying continue to payment.
     # No need to collect payment information.
     def payment_form_render(self, request, total):
         request.session['total_usd'] = str(total)
-        payment_id = self._create_daimo_pay_payment(total)
+
+        metadata = self._get_order_metadata(request)
+        payment_id = self._create_daimo_pay_payment(total, metadata)
+
         print(f"payment_form_render: total {total}, new payment_id {payment_id}")
         request.session['payment_id'] = payment_id
 
@@ -107,25 +139,24 @@ class DaimoPay(BasePaymentProvider):
         template = get_template("pretix_eth/checkout_payment_confirm.html")
         return template.render({ "payment_id": payment_id })
 
-    def _create_daimo_pay_payment(self, total: Decimal) -> str:
+    def _create_daimo_pay_payment(self, total: Decimal, metadata: dict) -> str:
         idempotency_key = str(uuid.uuid4())
-
         chain_op = 10
         token_op_dai = "0xDA10009cBd5D07dd0CeCc66161FC93D7c9000da1"
-        amount_dai = str(int(total * 1_000_000_000_000_000_000))
-
         request_data = {
-            "intent": f"Purchase",
-            "items": [],
-            "recipient": {
-                "address": self.settings.DAIMO_PAY_RECIPIENT_ADDRESS,
-                "amount": amount_dai,
-                "token": token_op_dai,
-                "chain": chain_op,
+            "display": {
+                "intent": f"Purchase",
             },
+            "destination": {
+                "destinationAddress": self.settings.DAIMO_PAY_RECIPIENT_ADDRESS,
+                "chainId": chain_op,
+                "tokenAddress": token_op_dai,
+                "amountUnits": str(total),
+            },
+            "metadata": metadata,
         }
         response = requests.post(
-            "https://pay.daimo.com/api/generate",
+            "https://pay.daimo.com/api/payment",
             headers={
                 "Api-Key": self.settings.DAIMO_PAY_API_KEY,
                 "Content-Type": "application/json",
