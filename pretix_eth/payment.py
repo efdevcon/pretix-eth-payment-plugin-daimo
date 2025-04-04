@@ -87,7 +87,9 @@ class DaimoPay(BasePaymentProvider):
         attendee_email = None
         
         # Try to get from session cart
-        cart_id = request.session.get('current_cart_event_1')
+        print(f"session: {', '.join([f'{k}={repr(v)}' for k, v in request.session.items()])}")
+        event_id = self.event.id
+        cart_id = request.session.get(f'current_cart_event_{event_id}')
         if cart_id and 'carts' in request.session and cart_id in request.session['carts']:
             cart = request.session['carts'][cart_id]
             if 'email' in cart:
@@ -119,7 +121,7 @@ class DaimoPay(BasePaymentProvider):
         metadata = self._get_order_metadata(request)
         payment_id = self._create_daimo_pay_payment(total, metadata)
 
-        print(f"payment_form_render: total {total}, new payment_id {payment_id}")
+        print(f"payment_form_render: total {total}, new payment_id {payment_id}, metadata ${repr(metadata)}")
         request.session['payment_id'] = payment_id
 
         template = get_template('pretix_eth/checkout_payment_form.html')
@@ -185,7 +187,7 @@ class DaimoPay(BasePaymentProvider):
             source_chain_id, source_tx_hash, dest_chain_id, dest_tx_hash = self._fetch_payment_by_id(payment_id)
 
             # If the payment is not yet paid, sleep and retry with exponential backoff
-            if source_tx_hash == None:
+            if source_tx_hash == None and dest_tx_hash == None:
                 if i == n_tries - 1:
                     break
                 sleep_time = 2**i
