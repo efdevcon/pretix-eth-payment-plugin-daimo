@@ -26,7 +26,7 @@ function Injector() {
     const payId = window["payment_id"] as string;
     context.paymentState.setPayId(payId);
 
-    // On click, show the payment modal
+    // On form submit, show the payment modal
     const placeOrderButton = document.querySelector(
       'button.btn-primary[type="submit"]'
     ) as HTMLButtonElement;
@@ -34,8 +34,11 @@ function Injector() {
     console.log(`Setting data-pay-id to ${payId}`);
     placeOrderButton.dataset.payId = payId;
     placeOrderButton.disabled = false;
-    placeOrderButton.onclick = (e) => {
+
+    const form = document.forms[0];
+    form.onsubmit = (e) => {
       e.preventDefault(); // Prevent submit
+      e.stopPropagation(); // Prevent Pretix "place binding order" flow
       context.showPayment({});
     };
   }, []);
