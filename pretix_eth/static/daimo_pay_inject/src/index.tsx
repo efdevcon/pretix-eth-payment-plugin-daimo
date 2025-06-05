@@ -35,8 +35,13 @@ function Injector() {
     placeOrderButton.dataset.payId = payId;
     placeOrderButton.disabled = false;
 
-    const form = document.forms[0];
+    const form = placeOrderButton.form;
+    if (form == null) {
+      console.error("Place order button is not in a form");
+      return;
+    }
     form.onsubmit = (e) => {
+      console.log("Handling Place Order submit button");
       e.preventDefault(); // Prevent submit
       e.stopPropagation(); // Prevent Pretix "place binding order" flow
       context.showPayment({});
