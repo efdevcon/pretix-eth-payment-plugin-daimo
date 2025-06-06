@@ -267,8 +267,8 @@ class DaimoPay(BasePaymentProvider):
             print(f"PAY: refunding {refund.order.code} to {email_addr}: {link}")
 
             amount_str = f"{refund.amount:.2f}"
-            body_text = f"Your order has been refunded.\n\nClaim ${amount_str} here: {link}\n\nThanks."
-            body_html = f"<b>Your order has been refunded.</b><br><br>Claim ${amount_str} here: <a href='{link}'>{link}</a><br><br>Thanks."
+            body_text = f"Hi there,\n\nYour order to the Devconnect ARG Ethereum World's Fair has been refunded.\n\nClaim your refund of ${amount_str} here: {link}\n\nThanks,\nDevconnect Team"
+            body_html = f"Hi there,<br><br>Your order to the Devconnect ARG Ethereum World's Fair has been refunded.<br><br>Claim your refund of ${amount_str} here: <a href='{link}'>{link}</a><br><br>Thanks,<br>Devconnect Team"
 
             mail_send(
                 to=[email_addr],
