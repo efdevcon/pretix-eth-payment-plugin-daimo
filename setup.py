@@ -44,7 +44,7 @@ extras_require['dev'] = (
 
 setup(
     name='pretix-eth-payment-plugin',
-    version='5.2.3-dev',
+    version='5.2.4-dev',
     description='Ethereum payment provider plugin for Pretix ticket sales, using Daimo Pay',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -54,10 +54,10 @@ setup(
     license='Apache Software License',
     install_requires=[
         "pretix>=4.16",
-        "web3>=6",
+        "web3>=7.12.0",
         "eth-typing",
         "eth-abi",
-        "eth-account<=0.8.0",
+        "eth-account>=0.13.6",
         "setuptools>=68.0.0",
         # django-bootstrap3 22.2 under py3.8, added for pip legacy resolver to avoid conflicts
         'importlib-metadata<3; python_version<"3.8"',
