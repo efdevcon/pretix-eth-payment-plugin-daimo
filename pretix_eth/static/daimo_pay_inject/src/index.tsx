@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import * as React from "react";
 import { createRoot } from "react-dom/client";
 import { Providers } from "./Providers";
@@ -21,6 +21,8 @@ function PayInject() {
 function Injector() {
   const context = usePayContext();
 
+  const formRef = useRef<HTMLFormElement>();
+
   useEffect(() => {
     // Set payment ID immediately
     const payId = window["payment_id"] as string;
@@ -35,12 +37,12 @@ function Injector() {
     placeOrderButton.dataset.payId = payId;
     placeOrderButton.disabled = false;
 
-    const form = placeOrderButton.form;
-    if (form == null) {
+    formRef.current = placeOrderButton.form;
+    if (formRef.current == null) {
       console.error("Place order button is not in a form");
       return;
     }
-    form.onsubmit = (e) => {
+    formRef.current.onsubmit = (e: any) => {
       console.log("Handling Place Order submit button");
       e.preventDefault(); // Prevent submit
       e.stopPropagation(); // Prevent Pretix "place binding order" flow
@@ -51,12 +53,15 @@ function Injector() {
   // Once payment succeeds, submit the form.
   const payStatus = useDaimoPayStatus();
   useEffect(() => {
-    if (payStatus?.status === "payment_completed") {
-      console.log("Payment completed, submitting form");
-      window.setTimeout(() => {
-        document.forms[0].submit();
-      }, 1000);
+    console.log("Pay status updated", payStatus);
+    if (payStatus?.status !== "payment_completed") return;
+
+    if (formRef.current == null) {
+      console.error("Unhandled payment: Place Order button is not in a form");
+      return;
     }
+    console.log("Payment completed, submitting form");
+    window.setTimeout(() => formRef.current.submit(), 1000);
   }, [payStatus?.status]);
 
   return null;

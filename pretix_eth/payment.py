@@ -27,7 +27,7 @@ class DaimoPaymentForm(PaymentProviderForm):
 class DaimoPay(BasePaymentProvider):
     identifier = "daimo_pay"
     verbose_name = _("Daimo Pay")
-    public_name = _("Pay from any chain, any coin")
+    public_name = _("Pay with crypto")
     # test_mode_message = "Paying in Test Mode"
     payment_form_class = DaimoPaymentForm
 
