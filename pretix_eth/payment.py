@@ -275,7 +275,7 @@ class DaimoPay(BasePaymentProvider):
                 subject=f"Refund for Order #{refund.order.code}",
                 body=body_text,
                 html=body_html,
-                sender="support@daimo.com",
+                sender="support@devconnect.org",
                 event=refund.order.event_id,
                 order=refund.order.id
             )
