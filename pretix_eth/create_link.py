@@ -51,7 +51,7 @@ def create_peanut_link(tokenAmount: Decimal, refundEoaPrivateKey: str) -> str:
     
     # Create link
     deposit_idx = int(deposit_receipt.logs[1].topics[1].hex(), 16) # log 0 = Transfer, log 1 = DepositEvent
-    link = f"https://peanut.to/claim?c={CHAIN_ID}&v=v4.3&i={deposit_idx}#p={password}"
+    link = f"https://peanut.me/claim?c={CHAIN_ID}&v=v4.3&i={deposit_idx}#p={password}"
     print(f"PAY: peanut claim link created: {link}")
     
     return link
