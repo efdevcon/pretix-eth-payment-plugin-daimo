@@ -148,7 +148,7 @@ class DaimoPay(BasePaymentProvider):
         request_data = {
             "display": {
                 "intent": f"Purchase",
-                "paymentOptions": ["Coinbase", "Binance"],
+                "paymentOptions": ["Coinbase", "Binance", "AllPaymentApps"],
             },
             "destination": {
                 "destinationAddress": self.settings.DAIMO_PAY_RECIPIENT_ADDRESS,
