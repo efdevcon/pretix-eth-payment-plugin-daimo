@@ -4,10 +4,14 @@ import React from 'react'
 import { DaimoPayProvider, getDefaultConfig } from '@daimo/pay'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { WagmiProvider, createConfig } from 'wagmi'
+import { porto } from 'porto/wagmi'
 
 const config = createConfig(
   getDefaultConfig({
     appName: 'Daimo Pay',
+    additionalConnectors: [
+      porto({ merchantUrl:  "https://pay.daimo.com/porto/merchant"})
+    ]
   }),
 )
 

@@ -25,7 +25,8 @@ def checkout_add_csp(sender, request, response, **kwargs):
             "blob: data:",
             "https://daimo.com",
             "https://*.daimo.com",
-            "https://assets.coingecko.com"
+            "https://assets.coingecko.com",
+            "https://*.gemini.com"
         ],
         'script-src': [
             # unsafe-inline/eval required for webpack bundles (we cannot know names in advance).
@@ -37,7 +38,8 @@ def checkout_add_csp(sender, request, response, **kwargs):
         ],
         'frame-src': [
             'https://verify.walletconnect.org',
-            'https://verify.walletconnect.com'
+            'https://verify.walletconnect.com',
+            'https://*.porto.sh'
         ],
         # Chrome correctly errors out without this CSP
         'connect-src': [
