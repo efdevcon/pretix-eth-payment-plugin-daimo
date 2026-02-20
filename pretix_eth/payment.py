@@ -68,10 +68,19 @@ class DaimoPay(BasePaymentProvider):
     #     return any(kw in user_agent for kw in ('iphone', 'android', 'mobile'))
 
     def _has_youth_ticket(self, request):
+        session_key = request.session.session_key
         cart_positions = CartPosition.objects.filter(
             event=self.event,
-            cart_id=request.session.session_key,
+            cart_id=session_key,
         )
+        item_names = [(str(pos.item.name), pos.cart_id) for pos in cart_positions]
+        print(f"_has_youth_ticket: session_key={session_key}, cart_positions={cart_positions.count()}, items={item_names}")
+
+        # Also try without cart_id filter to see all positions
+        all_positions = CartPosition.objects.filter(event=self.event)
+        all_items = [(str(pos.item.name), pos.cart_id) for pos in all_positions]
+        print(f"_has_youth_ticket: all cart positions for event: {all_items}")
+
         return any('youth' in str(pos.item.name).lower() for pos in cart_positions)
 
     # Validate config
@@ -163,7 +172,7 @@ class DaimoPay(BasePaymentProvider):
         request_data = {
             "display": {
                 "intent": f"Purchase",
-                "paymentOptions": [],
+                "paymentOptions": ["AllWallets", "AllAddresses"],
             },
             "destination": {
                 "destinationAddress": self.settings.DAIMO_PAY_RECIPIENT_ADDRESS,
