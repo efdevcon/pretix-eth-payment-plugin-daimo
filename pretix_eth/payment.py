@@ -76,6 +76,10 @@ class DaimoPay(BasePaymentProvider):
 
     # Validate config
     def is_allowed(self, request, **kwargs):
+        # Disable for youth tickets
+        if self._has_youth_ticket(request):
+            return False
+
         api_key_configured = bool(self.settings.DAIMO_PAY_API_KEY)
         if not api_key_configured:
             logger.error("Daimo Pay API key not configured")
@@ -127,14 +131,6 @@ class DaimoPay(BasePaymentProvider):
     # Payment screen: just a message saying continue to payment.
     # No need to collect payment information.
     def payment_form_render(self, request, total):
-        # Show unavailable message instead of payment form
-        # if self._is_mobile(request):
-        #     template = get_template('pretix_eth/checkout_payment_unavailable.html')
-        #     return template.render({'message': 'Crypto payments are not available on mobile devices. Please try again from a desktop browser.'})
-        if self._has_youth_ticket(request):
-            template = get_template('pretix_eth/checkout_payment_unavailable.html')
-            return template.render({'message': 'Crypto payments are not available for youth tickets. Please select a different payment method.'})
-
         request.session['total_usd'] = str(total)
 
         metadata = self._get_order_metadata(request)
@@ -149,10 +145,6 @@ class DaimoPay(BasePaymentProvider):
     # We do not collect payment information. Instead, the user
     # pays via Daimo Pay directly on the "Review order" screen.
     def payment_is_valid_session(self, request):
-        # if self._is_mobile(request):
-        #     return False
-        if self._has_youth_ticket(request):
-            return False
         return True
 
     # Confirmation page: generate a Daimo Pay payment and let the user pay.
