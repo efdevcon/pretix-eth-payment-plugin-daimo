@@ -82,6 +82,12 @@ class DaimoPay(BasePaymentProvider):
         return False
 
     def checkout_prepare(self, request, cart):
+        if self._is_mobile(request):
+            messages.error(
+                request,
+                _("Crypto payments are not available on mobile devices. Please try again from a desktop browser.")
+            )
+            return False
         if self._cart_has_youth_ticket(cart):
             messages.error(
                 request,
@@ -92,10 +98,6 @@ class DaimoPay(BasePaymentProvider):
 
     # Validate config
     def is_allowed(self, request, **kwargs):
-        # Disable on mobile devices
-        if self._is_mobile(request):
-            return False
-
         api_key_configured = bool(self.settings.DAIMO_PAY_API_KEY)
         if not api_key_configured:
             logger.error("Daimo Pay API key not configured")
