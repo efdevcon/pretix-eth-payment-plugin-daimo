@@ -73,15 +73,22 @@ class DaimoPay(BasePaymentProvider):
             event=self.event,
             cart_id=session_key,
         )
-        item_names = [(str(pos.item.name), pos.cart_id) for pos in cart_positions]
-        print(f"_has_youth_ticket: session_key={session_key}, cart_positions={cart_positions.count()}, items={item_names}")
 
-        # Also try without cart_id filter to see all positions
+        for pos in cart_positions:
+            name = pos.item.name
+            # I18nCharField: check all language variants via .data (dict of lang->str)
+            name_data = getattr(name, 'data', None) or {}
+            all_variants = list(name_data.values()) if isinstance(name_data, dict) else [str(name)]
+            print(f"_has_youth_ticket: item={pos.item.id}, name={repr(name)}, data={repr(name_data)}, variants={all_variants}")
+            if any('youth' in v.lower() for v in all_variants if isinstance(v, str)):
+                return True
+
+        # Debug: show all cart positions for this event
         all_positions = CartPosition.objects.filter(event=self.event)
-        all_items = [(str(pos.item.name), pos.cart_id) for pos in all_positions]
-        print(f"_has_youth_ticket: all cart positions for event: {all_items}")
+        all_items = [(pos.item.id, repr(pos.item.name), pos.cart_id) for pos in all_positions]
+        print(f"_has_youth_ticket: session_key={session_key}, matched={cart_positions.count()}, all_positions={all_items}")
 
-        return any('youth' in str(pos.item.name).lower() for pos in cart_positions)
+        return False
 
     # Validate config
     def is_allowed(self, request, **kwargs):
