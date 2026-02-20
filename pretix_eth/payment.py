@@ -6,12 +6,13 @@ import uuid
 import requests
 
 from django import forms
+from django.contrib import messages
 from django.urls import reverse
 from django.http import HttpRequest
 from django.template.loader import get_template
 from django.utils.translation import gettext_lazy as _
 
-from pretix.base.models import OrderPayment, OrderRefund, Order, CartPosition
+from pretix.base.models import OrderPayment, OrderRefund, Order
 from pretix.base.payment import BasePaymentProvider, PaymentProviderForm, PaymentException
 from pretix.base.services.mail import mail_send
 from web3 import Web3
@@ -67,37 +68,32 @@ class DaimoPay(BasePaymentProvider):
         user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
         return any(kw in user_agent for kw in ('iphone', 'android', 'mobile'))
 
-    def _has_youth_ticket(self, request):
-        session_key = request.session.session_key
-        cart_positions = CartPosition.objects.filter(
-            event=self.event,
-            cart_id=session_key,
-        )
-
-        for pos in cart_positions:
-            name = pos.item.name
-            # I18nCharField: check all language variants via .data (dict of lang->str)
-            name_data = getattr(name, 'data', None) or {}
-            all_variants = list(name_data.values()) if isinstance(name_data, dict) else [str(name)]
-            print(f"_has_youth_ticket: item={pos.item.id}, name={repr(name)}, data={repr(name_data)}, variants={all_variants}")
-            if any('youth' in v.lower() for v in all_variants if isinstance(v, str)):
+    def _cart_has_youth_ticket(self, cart):
+        """Check if any cart position contains 'youth' in the item name."""
+        for position in cart['positions']:
+            name = position.item.name
+            # Check all language variants of the I18n name
+            name_data = getattr(name, 'data', None)
+            if isinstance(name_data, dict):
+                if any('youth' in str(v).lower() for v in name_data.values()):
+                    return True
+            elif 'youth' in str(name).lower():
                 return True
-
-        # Debug: show all cart positions for this event
-        all_positions = CartPosition.objects.filter(event=self.event)
-        all_items = [(pos.item.id, repr(pos.item.name), pos.cart_id) for pos in all_positions]
-        print(f"_has_youth_ticket: session_key={session_key}, matched={cart_positions.count()}, all_positions={all_items}")
-
         return False
+
+    def checkout_prepare(self, request, cart):
+        if self._cart_has_youth_ticket(cart):
+            messages.error(
+                request,
+                _("Crypto payments are not available for youth tickets. Please select a different payment method.")
+            )
+            return False
+        return super().checkout_prepare(request, cart)
 
     # Validate config
     def is_allowed(self, request, **kwargs):
         # Disable on mobile devices
         if self._is_mobile(request):
-            return False
-
-        # Disable for youth tickets
-        if self._has_youth_ticket(request):
             return False
 
         api_key_configured = bool(self.settings.DAIMO_PAY_API_KEY)
