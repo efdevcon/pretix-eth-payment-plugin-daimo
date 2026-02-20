@@ -63,9 +63,9 @@ class DaimoPay(BasePaymentProvider):
         )
         return form_fields
 
-    # def _is_mobile(self, request):
-    #     user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
-    #     return any(kw in user_agent for kw in ('iphone', 'android', 'mobile'))
+    def _is_mobile(self, request):
+        user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
+        return any(kw in user_agent for kw in ('iphone', 'android', 'mobile'))
 
     def _has_youth_ticket(self, request):
         session_key = request.session.session_key
@@ -85,6 +85,10 @@ class DaimoPay(BasePaymentProvider):
 
     # Validate config
     def is_allowed(self, request, **kwargs):
+        # Disable on mobile devices
+        if self._is_mobile(request):
+            return False
+
         # Disable for youth tickets
         if self._has_youth_ticket(request):
             return False
