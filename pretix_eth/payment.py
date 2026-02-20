@@ -11,7 +11,7 @@ from django.http import HttpRequest
 from django.template.loader import get_template
 from django.utils.translation import gettext_lazy as _
 
-from pretix.base.models import OrderPayment, OrderRefund, Order
+from pretix.base.models import OrderPayment, OrderRefund, Order, CartPosition
 from pretix.base.payment import BasePaymentProvider, PaymentProviderForm, PaymentException
 from pretix.base.services.mail import mail_send
 from web3 import Web3
@@ -62,6 +62,17 @@ class DaimoPay(BasePaymentProvider):
             ]
         )
         return form_fields
+
+    # def _is_mobile(self, request):
+    #     user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
+    #     return any(kw in user_agent for kw in ('iphone', 'android', 'mobile'))
+
+    def _has_youth_ticket(self, request):
+        cart_positions = CartPosition.objects.filter(
+            event=self.event,
+            cart_id=request.session.session_key,
+        )
+        return any('youth' in str(pos.item.name).lower() for pos in cart_positions)
 
     # Validate config
     def is_allowed(self, request, **kwargs):
@@ -116,6 +127,14 @@ class DaimoPay(BasePaymentProvider):
     # Payment screen: just a message saying continue to payment.
     # No need to collect payment information.
     def payment_form_render(self, request, total):
+        # Show unavailable message instead of payment form
+        # if self._is_mobile(request):
+        #     template = get_template('pretix_eth/checkout_payment_unavailable.html')
+        #     return template.render({'message': 'Crypto payments are not available on mobile devices. Please try again from a desktop browser.'})
+        if self._has_youth_ticket(request):
+            template = get_template('pretix_eth/checkout_payment_unavailable.html')
+            return template.render({'message': 'Crypto payments are not available for youth tickets. Please select a different payment method.'})
+
         request.session['total_usd'] = str(total)
 
         metadata = self._get_order_metadata(request)
@@ -126,10 +145,14 @@ class DaimoPay(BasePaymentProvider):
 
         template = get_template('pretix_eth/checkout_payment_form.html')
         return template.render({})
-    
+
     # We do not collect payment information. Instead, the user
     # pays via Daimo Pay directly on the "Review order" screen.
     def payment_is_valid_session(self, request):
+        # if self._is_mobile(request):
+        #     return False
+        if self._has_youth_ticket(request):
+            return False
         return True
 
     # Confirmation page: generate a Daimo Pay payment and let the user pay.
@@ -148,7 +171,7 @@ class DaimoPay(BasePaymentProvider):
         request_data = {
             "display": {
                 "intent": f"Purchase",
-                "paymentOptions": ["AllWallets", "AllAddresses"],
+                "paymentOptions": [],
             },
             "destination": {
                 "destinationAddress": self.settings.DAIMO_PAY_RECIPIENT_ADDRESS,
