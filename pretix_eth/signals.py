@@ -24,6 +24,7 @@ def add_wc_csp(sender, request, response, **kwargs):
         ],
         'font-src': [
             'https://fonts.gstatic.com',
+            'https://fonts.reown.com',
         ],
         'frame-src': [
             'https://verify.walletconnect.org',
@@ -40,6 +41,8 @@ def add_wc_csp(sender, request, response, **kwargs):
             'https://*.reown.com',
             'https://*.alchemy.com',
             'https://*.publicnode.com',
+            'https://api.web3modal.org',
+            'https://*.web3modal.org',
         ],
         'manifest-src': ["'self'"],
     })

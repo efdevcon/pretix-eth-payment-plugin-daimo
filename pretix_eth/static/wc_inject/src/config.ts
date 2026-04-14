@@ -1,6 +1,6 @@
 // AppKit + wagmi setup. Reads config from a <script id="wc-config"> JSON tag
 // injected by the Pretix checkout template.
-import { createAppKit } from '@reown/appkit'
+import { createAppKit } from '@reown/appkit/react'
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
 import { mainnet, optimism, polygon, base, arbitrum } from '@reown/appkit/networks'
 import type { AppKitNetwork } from '@reown/appkit/networks'

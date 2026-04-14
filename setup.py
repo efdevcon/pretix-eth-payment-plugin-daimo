@@ -8,40 +8,61 @@ with open(os.path.join(os.path.dirname(__file__), 'README.md'), encoding='utf-8'
     long_description = f.read()
 
 
+def _maybe_collectstatic():
+    try:
+        from django.core import management
+        management.call_command('collectstatic', '--noinput', verbosity=1)
+        print('[pretix_eth] collectstatic completed')
+    except Exception as e:
+        print(f'[pretix_eth] collectstatic skipped ({e})')
+
+
+def _maybe_build_frontend():
+    import shutil
+    import subprocess
+    wc_dir = os.path.join(os.path.dirname(__file__), 'pretix_eth', 'static', 'wc_inject')
+    dist_file = os.path.join(wc_dir, 'dist', 'bundle.js')
+    if os.path.isfile(dist_file):
+        return
+    if not shutil.which('pnpm'):
+        print('[pretix_eth] pnpm not found; skipping frontend build')
+        return
+    print('[pretix_eth] Building frontend bundle via pnpm...')
+    subprocess.check_call(['pnpm', 'install'], cwd=wc_dir)
+    subprocess.check_call(['pnpm', 'run', 'build'], cwd=wc_dir)
+
+
 class CustomBuild(build):
     def run(self):
         from django.core import management
         management.call_command('compilemessages', verbosity=1)
-        self._maybe_build_frontend()
+        _maybe_build_frontend()
         build.run(self)
-        self._maybe_collectstatic()
-
-    def _maybe_collectstatic(self):
-        try:
-            from django.core import management
-            management.call_command('collectstatic', '--noinput', verbosity=1)
-            print('[pretix_eth] collectstatic completed')
-        except Exception as e:
-            print(f'[pretix_eth] collectstatic skipped ({e})')
-
-    def _maybe_build_frontend(self):
-        import shutil
-        import subprocess
-        wc_dir = os.path.join(os.path.dirname(__file__), 'pretix_eth', 'static', 'wc_inject')
-        dist_file = os.path.join(wc_dir, 'dist', 'bundle.js')
-        if os.path.isfile(dist_file):
-            return  # already built (sdist ships with dist/ included)
-        if not shutil.which('pnpm'):
-            print('[pretix_eth] pnpm not found; skipping frontend build')
-            return
-        print('[pretix_eth] Building frontend bundle via pnpm...')
-        subprocess.check_call(['pnpm', 'install'], cwd=wc_dir)
-        subprocess.check_call(['pnpm', 'run', 'build'], cwd=wc_dir)
+        _maybe_collectstatic()
 
 
-cmdclass = {
-    'build': CustomBuild
-}
+class CustomDevelop(object):
+    """Mixin that runs collectstatic after 'pip install -e' (setup.py develop)."""
+    def run(self):
+        super().run()
+        _maybe_collectstatic()
+
+
+# Import develop command and create a subclass with our mixin
+try:
+    from setuptools.command.develop import develop as _develop
+
+    class CustomDevelopCmd(CustomDevelop, _develop):
+        pass
+
+    cmdclass = {
+        'build': CustomBuild,
+        'develop': CustomDevelopCmd,
+    }
+except ImportError:
+    cmdclass = {
+        'build': CustomBuild,
+    }
 
 
 extras_require = {
