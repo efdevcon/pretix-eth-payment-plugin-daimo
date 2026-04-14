@@ -1,3 +1,10 @@
+/* Hide Pretix's native "Pay now" submit button — our plugin handles payment */
+.checkout-confirm-wrap .btn-primary[type="submit"],
+.checkout-button-row .btn-primary[type="submit"],
+button.btn-primary.btn-block[type="submit"] {
+  display: none !important;
+}
+
 .wc-root {
   font-family: system-ui, -apple-system, sans-serif;
   max-width: 480px;
