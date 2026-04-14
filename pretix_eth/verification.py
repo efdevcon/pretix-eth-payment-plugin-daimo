@@ -17,18 +17,24 @@ class VerificationResult:
     error: Optional[str] = None
 
 
-def _addr_eq(a: str, b: str) -> bool:
-    return (a or '').lower() == (b or '').lower()
+def _normalize_hex(val) -> str:
+    """Convert HexBytes / bytes / str to a lowercase 0x-prefixed hex string."""
+    if hasattr(val, 'hex'):
+        val = val.hex()
+    s = str(val).lower()
+    if not s.startswith('0x'):
+        s = '0x' + s
+    return s
+
+
+def _addr_eq(a, b) -> bool:
+    return _normalize_hex(a) == _normalize_hex(b)
 
 
 def _topic_to_addr(topic) -> str:
     # 32-byte topic → last 20 bytes as 0x-prefixed hex
-    if hasattr(topic, 'hex'):
-        topic = topic.hex()
-    t = str(topic)
-    if t.startswith('0x'):
-        t = t[2:]
-    return '0x' + t[-40:]
+    h = _normalize_hex(topic)  # '0x' + 64 hex chars
+    return '0x' + h[-40:]
 
 
 def verify_erc20_transfer(*, w3, chain_id: int, tx_hash: str,
@@ -60,10 +66,7 @@ def verify_erc20_transfer(*, w3, chain_id: int, tx_hash: str,
         topics = log_entry.get('topics', [])
         if len(topics) < 3:
             continue
-        topic0 = topics[0]
-        if hasattr(topic0, 'hex'):
-            topic0 = topic0.hex()
-        if not _addr_eq(str(topic0), ERC20_TRANSFER_TOPIC):
+        if _normalize_hex(topics[0]) != ERC20_TRANSFER_TOPIC:
             continue
         t_from = _topic_to_addr(topics[1])
         t_to = _topic_to_addr(topics[2])
@@ -71,10 +74,7 @@ def verify_erc20_transfer(*, w3, chain_id: int, tx_hash: str,
             continue
         if not _addr_eq(t_to, expected_to):
             continue
-        data = log_entry.get('data', '0')
-        if hasattr(data, 'hex'):
-            data = data.hex()
-        data_hex = str(data).replace('0x', '')
+        data_hex = _normalize_hex(log_entry.get('data', '0x0'))[2:]  # strip 0x
         value = int(data_hex, 16) if data_hex else 0
         if value < expected_amount:
             return VerificationResult(False, error=f'amount too low: {value} < {expected_amount}')
