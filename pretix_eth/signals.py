@@ -43,6 +43,7 @@ def add_wc_csp(sender, request, response, **kwargs):
             'https://*.publicnode.com',
             'https://api.web3modal.org',
             'https://*.web3modal.org',
+            'https://*.coinbase.com',
         ],
         'manifest-src': ["'self'"],
     })

@@ -46,5 +46,12 @@ export function initAppKit(projectId: string) {
     },
   })
 
-  return { wagmiAdapter, appKit }
+  return { wagmiAdapter, appKit, open: () => appKit.open() }
+}
+
+// Module-level singleton — set by index.tsx, used by components
+export let appKitInstance: ReturnType<typeof createAppKit> | null = null
+
+export function setAppKitInstance(ak: ReturnType<typeof createAppKit>) {
+  appKitInstance = ak
 }
