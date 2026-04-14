@@ -1,7 +1,6 @@
-/* Hide Pretix's native "Pay now" submit button — our plugin handles payment */
-.checkout-confirm-wrap .btn-primary[type="submit"],
-.checkout-button-row .btn-primary[type="submit"],
-button.btn-primary.btn-block[type="submit"] {
+/* When body has wc-full-checkout class, hide Pretix's native submit button */
+body.wc-full-checkout button.btn-primary[type="submit"],
+body.wc-full-checkout input.btn-primary[type="submit"] {
   display: none !important;
 }
 

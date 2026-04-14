@@ -1,6 +1,6 @@
 import { appKitInstance } from '../config'
 
-export function ConnectStep() {
+export function ConnectStep({ hasOrder }: { hasOrder: boolean }) {
   return (
     <div className="wc-root">
       <h3 style={{ marginTop: 0 }}>Pay with crypto</h3>

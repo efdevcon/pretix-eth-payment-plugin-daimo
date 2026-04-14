@@ -22,8 +22,9 @@ function parseOrgAndEvent(): { organizer: string; event: string } {
   return { organizer: match[1], event: match[2] }
 }
 
-export function usePaymentOptions(config: WCConfig) {
+export function usePaymentOptions(config: WCConfig, enabled: boolean = true) {
   return useQuery<PaymentOptionsResponse>({
+    enabled,
     queryKey: ['wc-payment-options', config.orderCode],
     queryFn: async () => {
       const { organizer, event } = parseOrgAndEvent()

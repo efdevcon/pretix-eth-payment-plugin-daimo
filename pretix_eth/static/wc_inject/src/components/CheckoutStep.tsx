@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   useAccount,
   useSignMessage,
@@ -77,6 +77,12 @@ export function CheckoutStep({
   const { sendTransactionAsync } = useSendTransaction()
 
   const { organizer, event } = parseOrgAndEvent()
+
+  // Hide Pretix's native submit button when our full checkout UI is active
+  useEffect(() => {
+    document.body.classList.add('wc-full-checkout')
+    return () => { document.body.classList.remove('wc-full-checkout') }
+  }, [])
 
   async function pollVerify(q: Quote, txHash: string) {
     for (let attempt = 0; attempt < MAX_VERIFY_ATTEMPTS; attempt++) {

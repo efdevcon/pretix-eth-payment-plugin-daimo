@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react'
 import { useAccount } from 'wagmi'
 import type { WCConfig } from './config'
 import { ConnectStep } from './components/ConnectStep'
+import { PreCheckoutStep } from './components/PreCheckoutStep'
 import { CheckoutStep } from './components/CheckoutStep'
 import { SuccessStep } from './components/SuccessStep'
 import { usePaymentOptions } from './hooks/usePaymentOptions'
 
-type Stage = 'connect' | 'checkout' | 'success'
+type Stage = 'connect' | 'pre-checkout' | 'checkout' | 'success'
 
 export interface Quote {
   quote_id: string
@@ -26,14 +27,26 @@ export function WCPaymentApp({ config }: { config: WCConfig }) {
   const [stage, setStage] = useState<Stage>('connect')
   const [txHash, setTxHash] = useState<string | null>(null)
   const [quote, setQuote] = useState<Quote | null>(null)
-  const opts = usePaymentOptions(config)
+
+  // If orderCode is empty, we're on the initial checkout (order not yet created).
+  // Full payment flow only works when order exists (retry/pay page).
+  const hasOrder = Boolean(config.orderCode)
+
+  const opts = usePaymentOptions(config, hasOrder)
 
   useEffect(() => {
-    if (account.isConnected && stage === 'connect') setStage('checkout')
+    if (account.isConnected && stage === 'connect') {
+      setStage(hasOrder ? 'checkout' : 'pre-checkout')
+    }
     if (!account.isConnected && stage !== 'connect') setStage('connect')
-  }, [account.isConnected, stage])
+  }, [account.isConnected, stage, hasOrder])
 
-  if (stage === 'connect') return <ConnectStep />
+  if (stage === 'connect') return <ConnectStep hasOrder={hasOrder} />
+
+  // Initial checkout — order doesn't exist yet. Show wallet info + "click Pay now"
+  if (stage === 'pre-checkout') {
+    return <PreCheckoutStep />
+  }
 
   if (stage === 'checkout') {
     if (opts.isLoading) return <div className="wc-root wc-small">Loading payment options...</div>
