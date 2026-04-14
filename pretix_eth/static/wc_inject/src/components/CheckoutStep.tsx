@@ -1,0 +1,347 @@
+import { useState } from 'react'
+import {
+  useAccount,
+  useSignMessage,
+  useSwitchChain,
+  useWriteContract,
+  useSendTransaction,
+} from 'wagmi'
+import { erc20Abi } from 'viem'
+import type { WCConfig } from '../config'
+import type { PaymentOption } from '../hooks/usePaymentOptions'
+import type { Quote } from '../WCPaymentApp'
+import { WalletHeader } from './WalletHeader'
+
+const MAX_VERIFY_ATTEMPTS = 5
+const RETRYABLE_ERROR_SUBSTRINGS = ['tx not mined yet', 'insufficient confirmations']
+
+const ETH_REASON_TEXT: Record<string, string> = {
+  oracle_unavailable_or_diverged:
+    'ETH payments temporarily unavailable. Our price oracles (Coinbase, Binance) disagree by more than 5% or are unreachable. Please pay with USDC or USDT0 instead.',
+  oracle_error:
+    'ETH payments temporarily unavailable due to a price lookup error. Please pay with USDC or USDT0 instead.',
+}
+
+type Status =
+  | 'idle'
+  | 'challenge'
+  | 'signing-challenge'
+  | 'quoting'
+  | 'switching'
+  | 'signing-tx'
+  | 'verifying'
+  | 'error'
+
+function parseOrgAndEvent(): { organizer: string; event: string } {
+  const match = window.location.pathname.match(/^\/([^/]+)\/([^/]+)/)
+  if (!match) throw new Error('Could not parse organizer/event from URL')
+  return { organizer: match[1], event: match[2] }
+}
+
+function formatAmount(q: Quote): string {
+  if (q.symbol === 'ETH') {
+    const eth = Number(BigInt(q.amount_raw)) / 1e18
+    return `${eth.toFixed(6)} ETH`
+  }
+  const usd = Number(BigInt(q.amount_raw)) / 1e6
+  return `${usd.toFixed(2)} ${q.symbol}`
+}
+
+export function CheckoutStep({
+  config,
+  options,
+  ethAvailable,
+  ethDisabledReason,
+  chainMetadata,
+  onConfirmed,
+}: {
+  config: WCConfig
+  options: PaymentOption[]
+  ethAvailable: boolean
+  ethDisabledReason: string | null
+  chainMetadata: Record<string, { name: string; explorer_url: string }>
+  onConfirmed: (txHash: string, quote: Quote) => void
+}) {
+  const [tokenFilter, setTokenFilter] = useState<string | null>(null)
+  const [picked, setPicked] = useState<PaymentOption | null>(null)
+  const [status, setStatus] = useState<Status>('idle')
+  const [error, setError] = useState<string | null>(null)
+  const [quote, setQuote] = useState<Quote | null>(null)
+  const [showManual, setShowManual] = useState(false)
+  const [manualHash, setManualHash] = useState('')
+
+  const { address, chainId: walletChainId } = useAccount()
+  const { signMessageAsync } = useSignMessage()
+  const { switchChainAsync } = useSwitchChain()
+  const { writeContractAsync } = useWriteContract()
+  const { sendTransactionAsync } = useSendTransaction()
+
+  const { organizer, event } = parseOrgAndEvent()
+
+  async function pollVerify(q: Quote, txHash: string) {
+    for (let attempt = 0; attempt < MAX_VERIFY_ATTEMPTS; attempt++) {
+      await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt)))
+      const r = await fetch(`${config.urlPrefix}/verify/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          quote_id: q.quote_id, tx_hash: txHash, chain_id: q.chain_id,
+          organizer, event,
+        }),
+      })
+      if (r.ok) {
+        const body = await r.json()
+        if (body.verified) return
+      } else {
+        const body = await r.json().catch(() => ({}))
+        const errMsg = (body.error as string | undefined) || `verify HTTP ${r.status}`
+        if (!RETRYABLE_ERROR_SUBSTRINGS.some((s) => errMsg.includes(s))) {
+          throw new Error(errMsg)
+        }
+      }
+    }
+    throw new Error('Verification timed out. Try submitting the transaction hash manually below.')
+  }
+
+  async function handlePay() {
+    if (!picked || !address) return
+    setError(null)
+
+    try {
+      // Step 1: Get challenge
+      setStatus('challenge')
+      const cr = await fetch(`${config.urlPrefix}/challenge/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          order_code: config.orderCode, order_secret: config.orderSecret,
+          organizer, event,
+        }),
+      })
+      if (!cr.ok) {
+        const body = await cr.json().catch(() => ({}))
+        throw new Error(body.error || `challenge HTTP ${cr.status}`)
+      }
+      const { nonce, message } = await cr.json()
+
+      // Step 2: Sign challenge
+      setStatus('signing-challenge')
+      const signature = await signMessageAsync({ message })
+
+      // Step 3: Create quote
+      setStatus('quoting')
+      const qr = await fetch(`${config.urlPrefix}/create-quote/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+          order_code: config.orderCode, order_secret: config.orderSecret,
+          organizer, event,
+          chain_id: picked.chain_id, symbol: picked.symbol,
+          nonce, signature,
+        }),
+      })
+      if (!qr.ok) {
+        const body = await qr.json().catch(() => ({}))
+        throw new Error(body.error || `create-quote HTTP ${qr.status}`)
+      }
+      const q: Quote = await qr.json()
+      setQuote(q)
+
+      // Step 4: Switch chain if needed
+      if (walletChainId !== q.chain_id) {
+        setStatus('switching')
+        await switchChainAsync({ chainId: q.chain_id })
+      }
+
+      // Step 5: Send tx
+      setStatus('signing-tx')
+      let txHash: string
+      if (q.symbol === 'ETH') {
+        txHash = await sendTransactionAsync({
+          to: q.receive_address as `0x${string}`,
+          value: BigInt(q.amount_raw),
+          chainId: q.chain_id,
+        })
+      } else {
+        if (!q.token_address) throw new Error('token_address missing')
+        txHash = await writeContractAsync({
+          address: q.token_address as `0x${string}`,
+          abi: erc20Abi,
+          functionName: 'transfer',
+          args: [q.receive_address as `0x${string}`, BigInt(q.amount_raw)],
+          chainId: q.chain_id,
+        })
+      }
+
+      // Step 6: Verify
+      setStatus('verifying')
+      await pollVerify(q, txHash)
+      onConfirmed(txHash, q)
+    } catch (e: unknown) {
+      const err = e as { shortMessage?: string; message?: string }
+      setError(err.shortMessage || err.message || String(e))
+      setStatus('error')
+      setShowManual(true)
+    }
+  }
+
+  async function handleManualVerify() {
+    const hash = manualHash.trim()
+    if (!/^0x[a-fA-F0-9]{64}$/.test(hash)) {
+      setError('Invalid transaction hash (must be 0x + 64 hex characters)')
+      return
+    }
+    if (!quote) {
+      setError('No quote created yet. Click "Pay now" first to create a quote, then paste your tx hash.')
+      return
+    }
+    setError(null)
+    setStatus('verifying')
+    try {
+      await pollVerify(quote, hash)
+      onConfirmed(hash, quote)
+    } catch (e: unknown) {
+      const err = e as { shortMessage?: string; message?: string }
+      setError(err.shortMessage || err.message || String(e))
+      setStatus('error')
+    }
+  }
+
+  const buttonLabel = (() => {
+    switch (status) {
+      case 'idle': return 'Pay now'
+      case 'challenge': return 'Preparing\u2026'
+      case 'signing-challenge': return 'Sign message in wallet\u2026'
+      case 'quoting': return 'Creating quote\u2026'
+      case 'switching': return 'Switching chain\u2026'
+      case 'signing-tx': return 'Confirm payment in wallet\u2026'
+      case 'verifying': return 'Verifying on-chain\u2026'
+      case 'error': return 'Retry'
+    }
+  })()
+
+  const busy = status !== 'idle' && status !== 'error'
+
+  return (
+    <div className="wc-root">
+      <WalletHeader />
+
+      <h3 style={{ marginTop: 0 }}>Select payment method</h3>
+
+      {!ethAvailable && ethDisabledReason && (
+        <div className="wc-notice">
+          {ETH_REASON_TEXT[ethDisabledReason] || 'ETH payments temporarily unavailable.'}
+        </div>
+      )}
+
+      {options.length === 0 && (
+        <div className="wc-error">No payment options available.</div>
+      )}
+
+      {/* Step 1: Token selection chips */}
+      {(() => {
+        const uniqueSymbols = [...new Set(options.map(o => o.symbol))]
+        const networksForToken = tokenFilter
+          ? options.filter(o => o.symbol === tokenFilter)
+          : []
+
+        return (
+          <>
+            <div className="wc-asset-selection">
+              <span className="wc-asset-label">Asset</span>
+              <div className="wc-asset-chips">
+                {uniqueSymbols.map(sym => (
+                  <button
+                    key={sym}
+                    type="button"
+                    className={`wc-asset-chip ${tokenFilter === sym ? 'wc-asset-chip--active' : ''}`}
+                    disabled={busy}
+                    onClick={() => {
+                      setTokenFilter(sym)
+                      // Auto-select first network for this token
+                      const first = options.find(o => o.symbol === sym)
+                      if (first) setPicked(first)
+                    }}
+                  >
+                    {sym}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Step 2: Network selection rows */}
+            {tokenFilter && networksForToken.length > 0 && (
+              <div className="wc-network-selection">
+                <span className="wc-network-label">Network</span>
+                <div className="wc-network-list">
+                  {networksForToken.map(opt => {
+                    const isSelected = picked?.chain_id === opt.chain_id && picked?.symbol === opt.symbol
+                    return (
+                      <button
+                        key={`${opt.chain_id}-${opt.symbol}`}
+                        type="button"
+                        className={`wc-network-row ${isSelected ? 'wc-network-row--selected' : ''}`}
+                        disabled={busy}
+                        onClick={() => setPicked(opt)}
+                      >
+                        <span className="wc-network-row-name">{opt.chain_name}</span>
+                        {isSelected && <span className="wc-network-row-check">&#10003;</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </>
+        )
+      })()}
+
+      {quote && (
+        <p className="wc-small" style={{ marginTop: 8 }}>
+          Amount: <strong>{formatAmount(quote)}</strong> to <code style={{ wordBreak: 'break-all' }}>{quote.receive_address}</code>
+        </p>
+      )}
+
+      <button
+        className="wc-button"
+        disabled={!picked || busy}
+        onClick={handlePay}
+      >
+        {buttonLabel}
+      </button>
+
+      {error && <div className="wc-error">{error}</div>}
+
+      <div style={{ marginTop: 16 }}>
+        <button
+          className="wc-link-button"
+          onClick={() => setShowManual(!showManual)}
+        >
+          {showManual ? 'Hide manual verification' : 'Already sent? Verify with transaction hash'}
+        </button>
+
+        {showManual && (
+          <div className="wc-manual-verify" style={{ marginTop: 8 }}>
+            <input
+              type="text"
+              className="wc-input"
+              placeholder="0x... (paste transaction hash)"
+              value={manualHash}
+              onChange={(e) => setManualHash(e.target.value)}
+            />
+            <button
+              className="wc-button wc-button-secondary"
+              onClick={handleManualVerify}
+              disabled={status === 'verifying' || !manualHash.trim()}
+            >
+              {status === 'verifying' ? 'Verifying\u2026' : 'Verify transaction'}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
