@@ -66,21 +66,34 @@ class WalletConnectPayment(BasePaymentProvider):
         return ''
 
     def checkout_confirm_render(self, request: HttpRequest, order=None, info_data=None) -> str:
-        tpl = get_template('pretix_eth/checkout_payment_confirm.html')
-        ctx = {
-            'wc_project_id': self.settings.get('wc_project_id'),
-            'url_prefix': '/plugin/wc',
-            'order_code': order.code if order else '',
-            'order_secret': order.secret if order else '',
-        }
-        return tpl.render(ctx, request=request)
+        if order:
+            # Payment retry/continue — order exists, show full crypto checkout UI
+            tpl = get_template('pretix_eth/checkout_payment_confirm.html')
+            ctx = {
+                'wc_project_id': self.settings.get('wc_project_id'),
+                'url_prefix': '/plugin/wc',
+                'order_code': order.code,
+                'order_secret': order.secret,
+            }
+            return tpl.render(ctx, request=request)
+        else:
+            # Initial checkout — order not yet created, just confirm payment method
+            return (
+                '<div class="wc-root">'
+                '<p>You will pay with crypto (USDC, USDT0, or ETH) after confirming your order.</p>'
+                '</div>'
+            )
 
     def payment_is_valid_session(self, request: HttpRequest) -> bool:
         return True
 
     def execute_payment(self, request: HttpRequest, payment):
-        # No-op: confirmation happens server-side via the /plugin/wc/verify endpoint
-        return None
+        # Redirect directly to the payment confirm page where our React UI loads.
+        # This skips the default Pretix flow (thanks page → pay/change → pay/confirm).
+        order = payment.order
+        org = order.event.organizer.slug
+        evt = order.event.slug
+        return f'/{org}/{evt}/order/{order.code}/{order.secret}/pay/{payment.local_id}/confirm'
 
     def payment_pending_render(self, request: HttpRequest, payment) -> str:
         tpl = get_template('pretix_eth/pending.html')
