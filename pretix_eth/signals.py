@@ -1,55 +1,45 @@
 from django.dispatch import receiver
-from django.template.loader import get_template
 
 from pretix.base.middleware import _parse_csp, _merge_csp, _render_csp
-from pretix.presale.signals import (
-    html_head,
-    process_response,
-)
-from pretix.base.signals import (
-    register_payment_providers,
-    register_data_exporters,
-)
+from pretix.presale.signals import process_response
+from pretix.base.signals import register_payment_providers
 
-@receiver(process_response, dispatch_uid="checkout_add_csp")
-def checkout_add_csp(sender, request, response, **kwargs):
+
+@receiver(process_response, dispatch_uid='wc_checkout_csp')
+def add_wc_csp(sender, request, response, **kwargs):
+    """Inject CSP directives needed for WalletConnect, AppKit, Alchemy RPC, and public RPCs."""
     h = {}
     if 'Content-Security-Policy' in response:
         h = _parse_csp(response['Content-Security-Policy'])
     _merge_csp(h, {
-        'style-src': [
-            'https://fonts.googleapis.com',
-            "'unsafe-inline'"
-        ],
+        'style-src': ["'unsafe-inline'"],
         'img-src': [
-            "blob: data:",
-            "https://daimo.com",
-            "https://*.daimo.com",
-            "https://assets.coingecko.com",
-            "https://*.gemini.com"
+            'blob: data:',
+            'https://*.walletconnect.com',
+            'https://*.reown.com',
         ],
         'script-src': [
-            # unsafe-inline/eval required for webpack bundles (we cannot know names in advance).
             "'unsafe-inline'",
-            "'unsafe-eval'"
+            "'unsafe-eval'",
         ],
         'font-src': [
-            "https://fonts.gstatic.com"
+            'https://fonts.gstatic.com',
         ],
         'frame-src': [
             'https://verify.walletconnect.org',
             'https://verify.walletconnect.com',
-            'https://*.porto.sh'
+            'https://*.walletconnect.org',
         ],
-        # Chrome correctly errors out without this CSP
         'connect-src': [
-            "https://*.daimo.xyz",
-            "https://*.daimo.com",
-            "https://cloudflare-eth.com/",
-            "wss://*.walletconnect.org",
-            "https://pulse.walletconnect.org",
-            "https://assets.coingecko.com",
-            "https://*.merkle.io",
+            'https://*.walletconnect.org',
+            'https://*.walletconnect.com',
+            'wss://relay.walletconnect.org',
+            'wss://relay.walletconnect.com',
+            'wss://*.walletconnect.org',
+            'https://pulse.walletconnect.org',
+            'https://*.reown.com',
+            'https://*.alchemy.com',
+            'https://*.publicnode.com',
         ],
         'manifest-src': ["'self'"],
     })
@@ -57,13 +47,7 @@ def checkout_add_csp(sender, request, response, **kwargs):
     return response
 
 
-@receiver(register_payment_providers, dispatch_uid="payment_eth")
+@receiver(register_payment_providers, dispatch_uid='wc_register_payment')
 def register_payment_provider(sender, **kwargs):
-    from .payment import DaimoPay
-    return DaimoPay
-
-
-@receiver(register_data_exporters, dispatch_uid='single_event_eth_orders')
-def register_data_exporter(sender, **kwargs):
-    from .exporter import EthereumOrdersExporter
-    return EthereumOrdersExporter
+    from .payment import WalletConnectPayment
+    return WalletConnectPayment

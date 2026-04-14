@@ -46,3 +46,25 @@ class SignedMessage(models.Model):
             order_payment__order=self.order_payment.order,
             invalid=False
         ).exists()
+
+
+class WCPaymentAttempt(models.Model):
+    """Tracks crypto payment attempts for the WalletConnect flow.
+    Enforces one-time use of tx_hash to prevent cross-order replay."""
+    STATE_CLAIMING = 'claiming'
+    STATE_COMPLETED = 'completed'
+    STATE_CHOICES = [
+        (STATE_CLAIMING, 'claiming'),
+        (STATE_COMPLETED, 'completed'),
+    ]
+
+    tx_hash = models.CharField(max_length=66, unique=True, db_index=True)
+    quote_id = models.CharField(max_length=32, db_index=True)
+    order_code = models.CharField(max_length=16)
+    payer = models.CharField(max_length=42)
+    chain_id = models.IntegerField()
+    state = models.CharField(max_length=16, choices=STATE_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = 'pretix_eth'

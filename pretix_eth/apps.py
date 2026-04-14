@@ -6,15 +6,15 @@ from . import __version__
 
 class EthApp(AppConfig):
     name = 'pretix_eth'
-    verbose_name = 'Pretix Ethereum Payment Provider'
+    verbose_name = 'Pretix Crypto Payment (WalletConnect)'
 
     class PretixPluginMeta:
-        name = _('Pretix Ethereum Payment Provider')
-        author = 'Pretix Ethereum Payment Plugin Contributors'
+        name = _('Crypto payment (WalletConnect)')
+        author = 'Ethereum Foundation'
         category = 'PAYMENT'
-        description = _('An ethereum payment provider plugin for pretix software')
+        description = _('Accept crypto payments (USDC, USDT0, ETH) via WalletConnect directly in Pretix checkout.')
         visible = True
         version = __version__
 
     def ready(self):
-        from . import signals  # NOQA
+        from . import signals  # noqa

@@ -1,13 +1,26 @@
 {% load i18n %}
-{% if payment_info %}
-    <dl class="dl-horizontal">
-        <dt><a href="https://3xpl.com/search?q={{ payment_info.source_tx_hash }}" target="_blank">Source Transaction</a></dt>
-        <dd><a href="https://3xpl.com/search?q={{ payment_info.dest_tx_hash }}" target="_blank">Dest Transaction</a></dd>
-    </dl>
-    {% if "message" in payment_info %}
-        <dl class="dl-horizontal">
-            <dt>{% trans "Error message" %}</dt>
-            <dd>{{ payment_info.message }}</dd>
-        </dl>
+<dl class="dl-horizontal">
+  <dt>{% trans "Chain" %}</dt>
+  <dd>{{ chain_name }} ({{ chain_id }})</dd>
+
+  <dt>{% trans "Token" %}</dt>
+  <dd>{{ token_symbol }}</dd>
+
+  <dt>{% trans "Amount" %}</dt>
+  <dd>{{ amount }}</dd>
+
+  <dt>{% trans "Payer" %}</dt>
+  <dd><code>{{ payer }}</code></dd>
+
+  <dt>{% trans "Transaction" %}</dt>
+  <dd>
+    {% if explorer_url %}
+      <a href="{{ explorer_url }}" target="_blank" rel="noopener">{{ tx_hash }}</a>
+    {% else %}
+      <code>{{ tx_hash }}</code>
     {% endif %}
-{% endif %}
+  </dd>
+
+  <dt>{% trans "Block" %}</dt>
+  <dd>{{ block_number }}</dd>
+</dl>

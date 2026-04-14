@@ -1,0 +1,42 @@
+import { useQuery } from '@tanstack/react-query'
+import type { WCConfig } from '../config'
+
+export interface PaymentOption {
+  chain_id: number
+  chain_name: string
+  symbol: string
+}
+
+export interface PaymentOptionsResponse {
+  options: PaymentOption[]
+  eth_available: boolean
+  eth_disabled_reason: string | null
+  receive_address: string
+  chain_metadata: Record<string, { name: string; explorer_url: string }>
+}
+
+function parseOrgAndEvent(): { organizer: string; event: string } {
+  // Pretix checkout URLs: /{organizer}/{event}/... or /{organizer}/{event}/checkout/...
+  const match = window.location.pathname.match(/^\/([^/]+)\/([^/]+)/)
+  if (!match) throw new Error('Could not parse organizer/event from URL')
+  return { organizer: match[1], event: match[2] }
+}
+
+export function usePaymentOptions(config: WCConfig) {
+  return useQuery<PaymentOptionsResponse>({
+    queryKey: ['wc-payment-options', config.orderCode],
+    queryFn: async () => {
+      const { organizer, event } = parseOrgAndEvent()
+      const url = new URL(`${config.urlPrefix}/payment-options/`, window.location.origin)
+      url.searchParams.set('organizer', organizer)
+      url.searchParams.set('event', event)
+      const r = await fetch(url.toString(), { credentials: 'same-origin' })
+      if (!r.ok) {
+        throw new Error(`payment-options HTTP ${r.status}`)
+      }
+      return r.json()
+    },
+    staleTime: 60_000, // options are stable within a session; don't refetch on focus
+    retry: 1,
+  })
+}

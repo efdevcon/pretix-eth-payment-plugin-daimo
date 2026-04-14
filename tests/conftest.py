@@ -16,7 +16,7 @@ from pretix.base.models import (
 )
 import pytest
 
-from pretix_eth.payment import DaimoPay
+from pretix_eth.payment import WalletConnectPayment
 from rest_framework.test import APIClient
 
 
@@ -75,7 +75,7 @@ def create_admin_client():
 
 @pytest.fixture
 def provider(event):
-    provider = DaimoPay(event)
+    provider = WalletConnectPayment(event)
     return provider
 
 
@@ -104,7 +104,7 @@ def get_order_and_payment(django_db_reset_sequences, event, get_organizer_scope)
                 identifier='web',
                 defaults={'name': 'Web Shop', 'method': 'web'}
             )
-            
+
             # Create order
             final_order_kwargs = {
                 'event': event,
@@ -123,7 +123,7 @@ def get_order_and_payment(django_db_reset_sequences, event, get_organizer_scope)
             final_payment_kwargs = {
                 'amount': '100.00',
                 'state': OrderPayment.PAYMENT_STATE_PENDING,
-                'provider': 'daimo_pay'
+                'provider': 'walletconnect'
             }
             if payment_kwargs is not None:
                 final_payment_kwargs.update(payment_kwargs)

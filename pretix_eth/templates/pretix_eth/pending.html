@@ -1,39 +1,12 @@
 {% load i18n %}
-{% load static %}
-{% load eventurl %}
-
-<div class="payment-pending">
-    {% if payment_is_valid %}
-        {% if payment.info_data.payment_url %}
-            <div class="alert alert-info">
-                <p>{% trans "Please complete your payment using the button below:" %}</p>
-                <p class="text-center">
-                    <a href="{{ payment.info_data.payment_url }}" class="btn btn-primary btn-lg" target="_blank">
-                        {% trans "Pay Now with Daimo Pay" %}
-                    </a>
-                </p>
-            </div>
-            <p class="text-muted">
-                {% blocktrans trimmed %}
-                After completing your payment, you will receive an email confirmation.
-                The page will automatically update once your payment is confirmed.
-                {% endblocktrans %}
-            </p>
-        {% else %}
-            <div class="alert alert-warning">
-                {% trans "Payment link not available. Please try again or contact support." %}
-            </div>
-        {% endif %}
-    {% else %}
-        <p>
-            <strong>
-                {% blocktrans trimmed %}
-                Your order is not yet complete. You may have tried to change the payment
-                method but cancelled the process midway. Please choose a payment method
-                by clicking the "Re-try payment or choose another payment method" button
-                below.
-                {% endblocktrans %}
-            </strong>
-        </p>
-    {% endif %}
+<div class="wc-pending">
+  {% if tx_hash %}
+    <p>{% trans "Your payment is being verified on-chain." %}</p>
+    <p>
+      <strong>{% trans "Transaction:" %}</strong>
+      <a href="{{ explorer_url }}" target="_blank" rel="noopener">{{ tx_hash }}</a>
+    </p>
+  {% else %}
+    <p>{% trans "Waiting for payment to be sent." %}</p>
+  {% endif %}
 </div>

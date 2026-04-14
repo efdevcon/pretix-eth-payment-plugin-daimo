@@ -12,7 +12,22 @@ class CustomBuild(build):
     def run(self):
         from django.core import management
         management.call_command('compilemessages', verbosity=1)
+        self._maybe_build_frontend()
         build.run(self)
+
+    def _maybe_build_frontend(self):
+        import shutil
+        import subprocess
+        wc_dir = os.path.join(os.path.dirname(__file__), 'pretix_eth', 'static', 'wc_inject')
+        dist_file = os.path.join(wc_dir, 'dist', 'bundle.js')
+        if os.path.isfile(dist_file):
+            return  # already built (sdist ships with dist/ included)
+        if not shutil.which('pnpm'):
+            print('[pretix_eth] pnpm not found; skipping frontend build')
+            return
+        print('[pretix_eth] Building frontend bundle via pnpm...')
+        subprocess.check_call(['pnpm', 'install'], cwd=wc_dir)
+        subprocess.check_call(['pnpm', 'run', 'build'], cwd=wc_dir)
 
 
 cmdclass = {
@@ -25,6 +40,7 @@ extras_require = {
         'pytest>=5',
         'pytest-django>=3.5',
         'celery>=5',
+        'pytest-asyncio>=0.23',
     ],
     'lint': [
         'flake8>=3.7',
@@ -45,7 +61,7 @@ extras_require['dev'] = (
 setup(
     name='pretix-eth-payment-plugin',
     version='5.7.0-dev',
-    description='Ethereum payment provider plugin for Pretix ticket sales, using Daimo Pay',
+    description='Ethereum payment provider plugin for Pretix ticket sales with WalletConnect',
     long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/daimo-eth/pretix-eth-payment-plugin',
@@ -59,6 +75,7 @@ setup(
         "eth-abi",
         "eth-account>=0.13.6",
         "setuptools>=68.0.0",
+        "httpx>=0.27",
         # django-bootstrap3 22.2 under py3.8, added for pip legacy resolver to avoid conflicts
         'importlib-metadata<3; python_version<"3.8"',
     ],
