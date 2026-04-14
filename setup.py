@@ -14,6 +14,15 @@ class CustomBuild(build):
         management.call_command('compilemessages', verbosity=1)
         self._maybe_build_frontend()
         build.run(self)
+        self._maybe_collectstatic()
+
+    def _maybe_collectstatic(self):
+        try:
+            from django.core import management
+            management.call_command('collectstatic', '--noinput', verbosity=1)
+            print('[pretix_eth] collectstatic completed')
+        except Exception as e:
+            print(f'[pretix_eth] collectstatic skipped ({e})')
 
     def _maybe_build_frontend(self):
         import shutil
