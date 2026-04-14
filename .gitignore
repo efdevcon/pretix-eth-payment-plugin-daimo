@@ -80,5 +80,5 @@ node_modules
 .DS_Store
 
 # Check in bundle
-!pretix_eth/static/daimo_pay_inject/dist/
-pretix_eth/static/daimo_pay_inject/dist/meta.json
+!pretix_eth/static/wc_inject/dist/
+pretix_eth/static/wc_inject/dist/meta.json
