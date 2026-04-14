@@ -59,8 +59,7 @@ class WalletConnectPayment(BasePaymentProvider):
         )
         return base
 
-    @property
-    def is_allowed(self):
+    def is_allowed(self, request=None, total=None):
         return bool(self.settings.get('receive_address')) and bool(self.settings.get('wc_project_id'))
 
     def checkout_prepare(self, request: HttpRequest, cart):
