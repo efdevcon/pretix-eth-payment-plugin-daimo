@@ -35,20 +35,17 @@ class WalletConnectPayment(BasePaymentProvider):
             required=False,
             widget=forms.PasswordInput(render_value=True),
         )
-        base['enabled_chains'] = forms.MultipleChoiceField(
-            label=_('Enabled chains'),
-            choices=[(str(cid), CHAIN_METADATA[cid]['name']) for cid in SUPPORTED_CHAINS],
-            widget=forms.CheckboxSelectMultiple,
-            initial=[str(c) for c in SUPPORTED_CHAINS],
-            required=True,
-        )
-        base['enabled_tokens'] = forms.MultipleChoiceField(
-            label=_('Enabled tokens'),
-            choices=[(s, s) for s in ALL_SYMBOLS],
-            widget=forms.CheckboxSelectMultiple,
-            initial=list(ALL_SYMBOLS),
-            required=True,
-        )
+        # Individual boolean per chain (hierarkey stores bools cleanly)
+        for cid in SUPPORTED_CHAINS:
+            base[f'chain_{cid}'] = forms.BooleanField(
+                label=_('Chain: %s') % CHAIN_METADATA[cid]['name'],
+                required=False, initial=True,
+            )
+        for sym in ALL_SYMBOLS:
+            base[f'token_{sym}'] = forms.BooleanField(
+                label=_('Token: %s') % sym,
+                required=False, initial=True,
+            )
         base['quote_ttl_seconds'] = forms.IntegerField(
             label=_('Quote TTL (seconds)'),
             initial=600, min_value=60, max_value=3600,

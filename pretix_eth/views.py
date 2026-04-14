@@ -85,13 +85,15 @@ def payment_options(request):
     if provider is None:
         return JsonResponse({'error': 'event not found'}, status=404)
 
-    enabled_chains_raw = provider.settings.get('enabled_chains', default=[str(c) for c in SUPPORTED_CHAINS])
-    if isinstance(enabled_chains_raw, str):
-        enabled_chains_raw = [enabled_chains_raw]
-    enabled_chains = [int(c) for c in enabled_chains_raw]
-    enabled_tokens = provider.settings.get('enabled_tokens', default=list(ALL_SYMBOLS))
-    if isinstance(enabled_tokens, str):
-        enabled_tokens = [enabled_tokens]
+    # Read per-chain and per-token boolean settings (default: all enabled)
+    enabled_chains = [
+        cid for cid in SUPPORTED_CHAINS
+        if str(provider.settings.get(f'chain_{cid}', default='True')).lower() in ('true', '1', 'yes')
+    ]
+    enabled_tokens = [
+        sym for sym in ALL_SYMBOLS
+        if str(provider.settings.get(f'token_{sym}', default='True')).lower() in ('true', '1', 'yes')
+    ]
     receive_address = provider.settings.get('receive_address')
 
     options = []
