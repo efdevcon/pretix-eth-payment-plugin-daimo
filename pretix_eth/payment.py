@@ -78,11 +78,8 @@ class WalletConnectPayment(BasePaymentProvider):
             return tpl.render(ctx, request=request)
         else:
             # Initial checkout — order not yet created, just confirm payment method
-            return (
-                '<div class="wc-root">'
-                '<p>You will pay with crypto (USDC, USDT0, or ETH) after confirming your order.</p>'
-                '</div>'
-            )
+            tpl = get_template('pretix_eth/checkout_pre_confirm.html')
+            return tpl.render({}, request=request)
 
     def payment_is_valid_session(self, request: HttpRequest) -> bool:
         return True
@@ -93,7 +90,7 @@ class WalletConnectPayment(BasePaymentProvider):
         order = payment.order
         org = order.event.organizer.slug
         evt = order.event.slug
-        return f'/{org}/{evt}/order/{order.code}/{order.secret}/pay/{payment.local_id}/confirm'
+        return f'/{org}/{evt}/order/{order.code}/{order.secret}/pay/{payment.pk}/confirm'
 
     def payment_pending_render(self, request: HttpRequest, payment) -> str:
         tpl = get_template('pretix_eth/pending.html')
