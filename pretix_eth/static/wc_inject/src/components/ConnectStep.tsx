@@ -8,7 +8,7 @@ export function ConnectStep() {
       {/* AppKit's built-in web component — shows Connect button, then account info once connected */}
       <appkit-button />
       <div style={{ marginTop: 12 }}>
-        <button className="wc-button" onClick={() => appKitInstance?.open()}>
+        <button type="button" className="wc-button" onClick={() => appKitInstance?.open()}>
           Connect wallet
         </button>
       </div>

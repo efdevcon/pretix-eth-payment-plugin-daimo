@@ -306,6 +306,7 @@ export function CheckoutStep({
       )}
 
       <button
+        type="button"
         className="wc-button"
         disabled={!picked || busy}
         onClick={handlePay}
@@ -317,6 +318,7 @@ export function CheckoutStep({
 
       <div style={{ marginTop: 16 }}>
         <button
+          type="button"
           className="wc-link-button"
           onClick={() => setShowManual(!showManual)}
         >
@@ -333,6 +335,7 @@ export function CheckoutStep({
               onChange={(e) => setManualHash(e.target.value)}
             />
             <button
+              type="button"
               className="wc-button wc-button-secondary"
               onClick={handleManualVerify}
               disabled={status === 'verifying' || !manualHash.trim()}
