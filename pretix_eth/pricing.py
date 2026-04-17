@@ -117,3 +117,50 @@ def build_quote(*, order_code: str, order_total_usd: Decimal,
         'expires_at': now + ttl_seconds,
         'order_total_usd': str(order_total_usd),
     }
+
+
+# ---------------------------------------------------------------------------
+# POL/USD dual-oracle (parallels ETH/USD above)
+# ---------------------------------------------------------------------------
+
+COINBASE_POL_URL = 'https://api.coinbase.com/v2/prices/POL-USD/spot'
+BINANCE_POL_URL = 'https://api.binance.com/api/v3/ticker/price?symbol=POLUSDT'
+
+
+async def _fetch_coinbase_pol(client: httpx.AsyncClient) -> float:
+    r = await client.get(COINBASE_POL_URL, timeout=5.0)
+    r.raise_for_status()
+    return float(r.json()['data']['amount'])
+
+
+async def _fetch_binance_pol(client: httpx.AsyncClient) -> float:
+    r = await client.get(BINANCE_POL_URL, timeout=5.0)
+    r.raise_for_status()
+    return float(r.json()['price'])
+
+
+async def fetch_pol_price_usd() -> Optional[EthPriceResult]:
+    """Return POL price if both oracles agree within 5%. Return None if either
+    oracle is unreachable or they diverge too much -- callers disable POL."""
+    async with httpx.AsyncClient() as client:
+        results = await asyncio.gather(
+            _fetch_coinbase_pol(client), _fetch_binance_pol(client),
+            return_exceptions=True,
+        )
+    cb = results[0] if isinstance(results[0], float) else None
+    bn = results[1] if isinstance(results[1], float) else None
+    if cb is not None and bn is not None:
+        avg = (cb + bn) / 2
+        div = abs(cb - bn) / avg * 100
+        if div > MAX_DIVERGENCE_PCT:
+            log.warning(
+                'POL oracle divergence %.1f%% (cb $%.4f, bn $%.4f) -- disabling POL',
+                div, cb, bn,
+            )
+            return None
+        return EthPriceResult(price=avg, source='dual')
+    log.warning(
+        'POL oracle unavailable (cb=%s, bn=%s) -- disabling POL',
+        cb, bn,
+    )
+    return None

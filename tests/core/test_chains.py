@@ -3,6 +3,7 @@ from pretix_eth.chains import (
     SUPPORTED_CHAINS, TOKEN_CONTRACTS, CHAIN_METADATA,
     get_token_contract, is_supported,
 )
+from pretix_eth.chains import get_eip712_domain, TOKEN_CONFIGS
 
 
 def test_all_five_chains_present():
@@ -40,3 +41,26 @@ def test_chain_metadata_has_explorer_for_base():
     meta = CHAIN_METADATA[8453]
     assert 'basescan.org' in meta['explorer_url']
     assert meta['name'] == 'Base'
+
+
+def test_base_usdc_domain():
+    d = get_eip712_domain(8453, 'USDC')
+    assert d['name'] == 'USD Coin'
+    assert d['version'] == '2'
+    assert d['chainId'] == 8453
+    assert d['verifyingContract'].lower() == '0x833589fcd6edb6e08f4c7c32d4f71b54bda02913'
+
+
+def test_optimism_usdt0_domain():
+    d = get_eip712_domain(10, 'USDT0')
+    assert d['name'] == 'USD\u20ae0'  # USD₮0
+    assert d['version'] == '1'
+    assert d['chainId'] == 10
+
+
+def test_eth_has_no_domain():
+    assert get_eip712_domain(8453, 'ETH') is None
+
+
+def test_unsupported_combo_returns_none():
+    assert get_eip712_domain(8453, 'USDT0') is None  # USDT0 not deployed on Base

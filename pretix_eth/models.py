@@ -68,3 +68,64 @@ class WCPaymentAttempt(models.Model):
 
     class Meta:
         app_label = 'pretix_eth'
+
+
+class X402PendingOrder(models.Model):
+    """Pending x402 ticket order between purchase and payment verification."""
+    event = models.ForeignKey('pretixbase.Event', on_delete=models.CASCADE, related_name='x402_pending_orders')
+    payment_reference = models.CharField(max_length=100, primary_key=True)
+    order_data = models.JSONField()
+    total_usd = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField(db_index=True)
+    intended_payer = models.CharField(max_length=42)
+    expected_eth_amount_wei_by_chain = models.JSONField(null=True, blank=True)
+    expected_chain_id = models.IntegerField(null=True, blank=True)
+    metadata = models.JSONField(null=True, blank=True)
+
+    class Meta:
+        app_label = 'pretix_eth'
+        indexes = [models.Index(fields=['event', 'expires_at'])]
+
+
+class X402CompletedOrder(models.Model):
+    """Completed x402 ticket order after payment verification."""
+    REFUND_PENDING = 'pending'
+    REFUND_CONFIRMED = 'confirmed'
+    REFUND_FAILED = 'failed'
+    REFUND_CHOICES = [
+        (REFUND_PENDING, 'pending'),
+        (REFUND_CONFIRMED, 'confirmed'),
+        (REFUND_FAILED, 'failed'),
+    ]
+
+    event = models.ForeignKey('pretixbase.Event', on_delete=models.CASCADE, related_name='x402_completed_orders')
+    payment_reference = models.CharField(max_length=100, primary_key=True)
+    tx_hash = models.CharField(max_length=66, unique=True, db_index=True)
+    pretix_order_code = models.CharField(max_length=16, db_index=True)
+    payer = models.CharField(max_length=42)
+    completed_at = models.DateTimeField(auto_now_add=True)
+    chain_id = models.IntegerField()
+    total_usd = models.DecimalField(max_digits=12, decimal_places=2)
+    token_symbol = models.CharField(max_length=20)
+    crypto_amount = models.CharField(max_length=50, null=True, blank=True)
+    gas_cost_wei = models.CharField(max_length=50, null=True, blank=True)
+    refund_status = models.CharField(max_length=16, null=True, blank=True, choices=REFUND_CHOICES, db_index=True)
+    refund_tx_hash = models.CharField(max_length=66, null=True, blank=True)
+    refund_meta = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        app_label = 'pretix_eth'
+        indexes = [
+            models.Index(fields=['event', '-completed_at']),
+            models.Index(fields=['event', 'refund_status']),
+        ]
+
+
+class X402VerifyAttempt(models.Model):
+    """Rate-limit attempt log. Key is a prefix+identifier, e.g. verify_ref:<ref>, verify_ip:<ip>, purchase_ip:<ip>."""
+    key = models.CharField(max_length=120, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        app_label = 'pretix_eth'

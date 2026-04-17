@@ -55,3 +55,17 @@ def add_wc_csp(sender, request, response, **kwargs):
 def register_payment_provider(sender, **kwargs):
     from .payment import WalletConnectPayment
     return WalletConnectPayment
+
+
+try:
+    from pretix.base.signals import periodic_task
+
+    @receiver(periodic_task, dispatch_uid='pretix_eth_x402_cleanup')
+    def register_x402_cleanup(sender, **kwargs):
+        # Runs every hour via Pretix's built-in periodic_task signal
+        from pretix_eth.x402.tasks import cleanup_expired_pending_task, cleanup_verify_attempts_task
+        cleanup_expired_pending_task.apply_async()
+        cleanup_verify_attempts_task.apply_async()
+except ImportError:
+    # Fallback: no periodic scheduling (dev/test environments)
+    pass

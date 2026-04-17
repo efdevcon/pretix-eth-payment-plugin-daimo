@@ -90,7 +90,7 @@ extras_require['dev'] = (
 
 setup(
     name='pretix-eth-payment-plugin',
-    version='6.0.0-dev',
+    version='7.0.0-dev',
     description='Ethereum payment provider plugin for Pretix ticket sales with WalletConnect',
     long_description=long_description,
     long_description_content_type='text/markdown',

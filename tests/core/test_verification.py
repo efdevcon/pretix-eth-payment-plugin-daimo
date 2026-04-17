@@ -199,7 +199,7 @@ def test_native_eth_wrong_recipient(fake_w3):
         expected_amount_wei=10**18, min_confirmations=1,
     )
     assert r.verified is False
-    assert 'recipient' in r.error.lower()
+    assert 'mismatch' in r.error.lower()
 
 
 def test_native_eth_wrong_sender(fake_w3):
@@ -216,7 +216,7 @@ def test_native_eth_wrong_sender(fake_w3):
         expected_amount_wei=10**18, min_confirmations=1,
     )
     assert r.verified is False
-    assert 'sender' in r.error.lower()
+    assert 'mismatch' in r.error.lower()
 
 
 def test_native_eth_underpayment(fake_w3):

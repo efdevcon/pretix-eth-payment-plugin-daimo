@@ -120,3 +120,15 @@ def test_build_quote_eth_has_null_token_address():
     assert quote['token_address'] is None
     assert quote['amount_raw'] == str(10**18)
     assert quote['eth_price_usd'] == 2000.0
+
+
+async def test_fetch_pol_price_dual_oracle():
+    async def fake_get(self, url, **kw):
+        if 'coinbase' in url:
+            return _FakeResponse({'data': {'amount': '0.80'}})
+        return _FakeResponse({'price': '0.81'})
+    with mock.patch('httpx.AsyncClient.get', fake_get):
+        from pretix_eth.pricing import fetch_pol_price_usd
+        result = await fetch_pol_price_usd()
+    assert result is not None
+    assert result.price == pytest.approx(0.805)

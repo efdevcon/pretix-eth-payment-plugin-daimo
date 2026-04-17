@@ -35,6 +35,19 @@ class WalletConnectPayment(BasePaymentProvider):
             required=False,
             widget=forms.PasswordInput(render_value=True),
         )
+        base['relayer_private_key'] = forms.CharField(
+            label=_('Relayer private key (gasless USDC/USDT0). Overridden by WC_RELAYER_PRIVATE_KEY env.'),
+            required=False,
+            widget=forms.PasswordInput(render_value=True),
+        )
+        base['crypto_discount_percent'] = forms.DecimalField(
+            label=_('Crypto discount (% off the fiat price)'),
+            initial=0, min_value=0, max_value=50, decimal_places=2,
+        )
+        base['payment_recipient'] = forms.CharField(
+            label=_('Merchant wallet address (EIP-55) where crypto payments are sent'),
+            max_length=42, min_length=42, required=True,
+        )
         # Individual boolean per chain (hierarkey stores bools cleanly)
         for cid in SUPPORTED_CHAINS:
             base[f'chain_{cid}'] = forms.BooleanField(

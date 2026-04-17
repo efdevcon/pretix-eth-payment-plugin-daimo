@@ -140,6 +140,24 @@ def get_order_and_payment(django_db_reset_sequences, event, get_organizer_scope)
     return _get_order_and_payment
 
 
+@pytest.fixture
+def api_client(event, django_db_reset_sequences):
+    """Django test client pre-configured with a valid Pretix API token.
+    Use this instead of `client` for x402 view tests."""
+    from django_scopes import scopes_disabled
+    with scopes_disabled():
+        team = Team.objects.create(
+            organizer=event.organizer, name='Test API Team',
+            all_events=True,
+        )
+        from pretix.base.models import TeamAPIToken
+        token_obj = TeamAPIToken.objects.create(team=team)
+    from rest_framework.test import APIClient
+    c = APIClient()
+    c.credentials(HTTP_AUTHORIZATION=f'Token {token_obj.token}')
+    return c
+
+
 def pytest_addoption(parser):
     parser.addoption(
         "--require-web3", action="store_true", default=False,

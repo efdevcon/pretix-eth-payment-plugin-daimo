@@ -1,61 +1,121 @@
-# Pretix WalletConnect Crypto Payment Plugin
+# Pretix Crypto Payment Plugin
 
-A payment plugin for [Pretix](https://github.com/pretix/pretix) that accepts crypto payments via WalletConnect. No vendor dependency — payments are verified directly on-chain.
+A payment plugin for [Pretix](https://github.com/pretix/pretix) that accepts crypto payments. Two modes: direct WalletConnect checkout (user pays gas) and x402 gasless flow (relayer pays gas for USDC/USDT0). All payments verified directly on-chain — no vendor dependency.
 
 ## Supported chains & tokens
 
 - **Chains:** Ethereum, Optimism, Polygon, Base, Arbitrum
 - **Tokens:** USDC (all chains), USDT0 (Optimism, Arbitrum), native ETH (all chains)
 
-## How it works
+## Payment flows
+
+### WalletConnect (direct send)
+
+User connects wallet, picks token+network, sends a standard ERC-20 `transfer` or native ETH send, plugin verifies on-chain.
 
 1. Buyer selects "Crypto" at checkout and confirms the order
 2. Pretix creates the order and redirects to the payment page
-3. Buyer connects their wallet via WalletConnect (MetaMask, Rainbow, Coinbase Wallet, etc.)
-4. Buyer picks a token and network, clicks "Pay now"
+3. Buyer connects wallet via WalletConnect (MetaMask, Rainbow, Coinbase Wallet, etc.)
+4. Buyer picks token and network, clicks "Pay now"
 5. Plugin creates a quote (locked price, 10-min expiry) with a SIWE-lite signature challenge
 6. Buyer signs the challenge (proves wallet ownership) then confirms the on-chain transfer
-7. Plugin verifies the transaction on-chain via RPC (Alchemy or public fallback)
-8. Order is marked as paid in Pretix
+7. Plugin verifies the transaction on-chain via RPC
+8. Order is marked as paid
 
-ETH pricing uses a dual-oracle system (Coinbase + Binance). If the two sources disagree by more than 5%, ETH payments are temporarily disabled and buyers are shown a notice to use USDC/USDT0 instead.
+### x402 gasless (USDC/USDT0)
+
+Buyer signs an EIP-3009 `transferWithAuthorization`; a relayer broadcasts it and pays gas. No ETH needed in the buyer's wallet for stablecoin payments.
+
+1. Frontend creates a purchase order via `/plugin/x402/purchase/` (pricing includes variations, addons, voucher discounts, crypto discount)
+2. Frontend POSTs to `/plugin/x402/payment-options/` with the buyer's wallet — plugin returns a list of `PaymentOption[]` (per chain + token) with balances, sufficiency flags, and a pre-built `signingRequest` (EIP-712 typed data for USDC/USDT0, or `eth_sendTransaction` params for ETH)
+3. Buyer picks an option and signs in their wallet (no gas for stablecoins)
+4. For gasless stablecoins: frontend submits `{authorization, signature}` or `{authorization, rawSignature}` to `/plugin/x402/relayer/execute-transfer/`; plugin validates the authorization terms (recipient, amount, expiry) and broadcasts via relayer
+5. Frontend polls `/plugin/x402/verify/` until on-chain confirmation
+6. Plugin creates the Pretix order (with full variation / addon / answer / voucher parity) and marks it paid
+
+### Native ETH (with payer signature)
+
+Same as WalletConnect flow but with an additional `ethPayerSignature` at verify time that cryptographically binds the payer's wallet to the order. Supports smart wallets (ERC-1271, ERC-6492) and ERC-4337 bundler flows via `debug_traceTransaction` internal call detection.
+
+## Pricing
+
+- **Stablecoins:** 1 USDC = 1 USD (direct mapping)
+- **ETH:** Dual-oracle (Coinbase + Binance). If sources diverge >5%, ETH is temporarily disabled with a user-visible notice
+- **POL:** Dual-oracle (Coinbase + Binance), same divergence logic
+- **Vouchers:** Supported — set/subtract/percent price modes, per-item targeting
+- **Crypto discount:** Configurable percentage off (stacks with vouchers)
 
 ## Security
 
-- Wallet ownership verified via signed challenge (SIWE-lite)
+- **Authentication:** all `/plugin/x402/*` endpoints require a valid Pretix API token (`Authorization: Token <token>`) — same token system Pretix uses for its own REST API. No custom secrets to manage.
+- **USDC/USDT0 gasless:** Payer cryptographically bound via EIP-3009 signature (on-chain verified by token contract). Accepts both EOA (`{v, r, s}` object) and smart wallet (`rawSignature` hex) formats.
+- **Native ETH:** Payer bound via `ethPayerSignature` — supports EOA (ECDSA), smart wallets (ERC-1271), and counterfactual wallets (ERC-6492)
+- **Smart wallet ETH (ERC-4337):** `debug_traceTransaction` fallback walks internal call tree to find the actual ETH transfer from the smart wallet
+- **WalletConnect direct:** SIWE-lite challenge at quote creation proves wallet ownership
+- **Relayer binding:** Before sponsoring gas, the plugin verifies `authorization.to == configured recipient`, `authorization.value >= expected amount`, `authorization.from == intendedPayer`, and `validBefore > now` — an attacker with a valid token cannot redirect funds or underpay
 - Transaction hash is single-use (prevents cross-order replay)
-- Chain, token contract, sender, recipient, and amount are all verified on-chain
-- Quote expiry prevents stale-rate attacks
-- Rate limiting on the verify endpoint
+- Chain, token contract, sender, recipient, and amount all verified on-chain
+- Rate limiting on purchase and verify endpoints
+- Atomic claim + reserve prevents double-spend race conditions
 
 ## Setup
 
 ### 1. Install
 
 ```bash
-pip install -e 'git+https://github.com/efdevcon/pretix-eth-payment-plugin-daimo.git@wallet-connect#egg=pretix-eth-payment-plugin'
+pip install -e 'git+https://github.com/efdevcon/pretix-eth-payment-plugin-daimo.git@wallet-connect-x402#egg=pretix-eth-payment-plugin'
 python -m pretix migrate pretix_eth
 ```
 
 ### 2. Configure
 
-In Pretix admin, go to your event > Settings > Payment:
+All settings are configurable via the Pretix admin UI (Settings > Payment). No environment variables required — env vars are optional overrides for production hardening.
 
 | Setting | Required | Description |
 |---|---|---|
-| Receive address | Yes | EIP-55 checksummed wallet address (same on all chains) |
+| Receive address | Yes | EIP-55 wallet for the direct-send WalletConnect flow |
+| Payment recipient | Yes | EIP-55 wallet for x402 gasless payments (usually same as Receive address) |
 | WalletConnect project ID | Yes | Free from [cloud.reown.com](https://cloud.reown.com) |
 | Alchemy API key | No | Improves RPC reliability; falls back to public RPCs |
-| Chain/token toggles | No | Enable/disable individual chains and tokens |
+| Relayer private key | No | Required for gasless USDC/USDT0 (fund the wallet with ETH on each supported chain for gas) |
+| Crypto discount % | No | Percentage off fiat price for crypto payments (stacks on top of vouchers) |
+| Chain toggles (×5) | No | Enable/disable individual chains (Ethereum, Optimism, Polygon, Base, Arbitrum) |
+| Token toggles (×3) | No | Enable/disable individual tokens (USDC, USDT0, ETH) |
 | Quote TTL | No | Default 600s (10 min) |
 | Min confirmations | No | Default 1 |
 
-### 3. Environment (optional)
+### 3. Environment overrides (optional)
 
 | Variable | Purpose |
 |---|---|
-| `WC_ALCHEMY_API_KEY` | Overrides the plugin setting (preferred for production) |
-| `WC_VERIFY_RATE_LIMIT_PER_MIN` | Verify endpoint rate limit per quote+IP (default 10) |
+| `WC_ALCHEMY_API_KEY` | Overrides Alchemy key (preferred for production — not in DB) |
+| `WC_RELAYER_PRIVATE_KEY` | Overrides relayer key (preferred for production — not in DB) |
+| `WC_VERIFY_RATE_LIMIT_PER_MIN` | Verify endpoint rate limit (default 10) |
+
+### 4. x402 proxy integration (devcon-next)
+
+For the x402 gasless flow, devcon-next API routes proxy to the plugin using the existing Pretix API token (`PRETIX_API_TOKEN_DEV` / `PRETIX_API_TOKEN_PROD`). The plugin validates the token against Pretix's `TeamAPIToken` table via the `Authorization: Token <token>` header. No additional secrets needed.
+
+Plugin endpoints (all accept JSON body with `organizer` + `event` slugs and camelCase field names):
+- `POST /plugin/x402/purchase/` — create pending order (returns HTTP 402 + `{paymentDetails, orderSummary}`); supports tickets, variations, addons, answers, voucher
+- `POST /plugin/x402/payment-options/` — given `{paymentReference, walletAddress}`, returns `PaymentOption[]` with balance, sufficiency, and pre-built `signingRequest` (EIP-712 for USDC/USDT0 or `eth_sendTransaction` for ETH)
+- `POST /plugin/x402/relayer/prepare-authorization/` — returns EIP-712 typed data for a specific chain/token choice (alternative to payment-options for clients that don't want balances)
+- `POST /plugin/x402/relayer/execute-transfer/` — relayer broadcasts the signed `transferWithAuthorization`; validates authorization terms against the pending order before spending gas
+- `POST /plugin/x402/verify/` — verifies on-chain tx, creates Pretix order + `OrderPosition` rows (variations/addons/answers/voucher), confirms payment
+- `GET /plugin/x402/admin/orders/` — list completed + pending orders
+- `GET /plugin/x402/admin/stats/` — dashboard aggregates (counts, total_usd via DB aggregate)
+- `POST /plugin/x402/admin/refund/?action=initiate|confirm|fail` — refund state machine
+
+Frontend field names: camelCase (`paymentReference`, `chainId`, `txHash`, `walletAddress`). The plugin's request body parser also accepts snake_case (`payment_reference`, `chain_id`, etc.) for non-frontend clients.
+
+## Known gaps / TODOs
+
+These are documented, non-blocking items for a future iteration:
+
+- **Event-level authorization check**: `require_pretix_token` validates that the token is valid and active, but does not yet check that the token's team has access to the specific `(organizer, event)` being operated on. A `check_team_event_access` helper exists in `x402/auth.py` ready to wire in. Marked as `TODO` in `views_x402.py` and `views_admin.py`.
+- **Agent endpoint** (`/purchase/[email].ts` in devcon-next): currently stubbed at HTTP 501. If x402 SDK agents need to work, add a `/plugin/x402/purchase-agent/` endpoint that skips the `intendedPayer` requirement.
+- **Verify cooldown**: the 10-second-between-attempts cooldown from devcon's ticketStore was removed during Phase 3 (conflicted with a test that didn't mock time). The 10/hour and 30/minute limits still apply — add the cooldown back with time-mocked tests if spam protection needs tightening.
+- **Direct browser → plugin calls**: the public endpoints (`purchase`, `payment-options`, `relayer/*`, `verify`) currently require a server-side Pretix API token. If we want to skip the devcon-next proxy entirely and have the browser call the plugin directly, we'd need to drop the `Authorization: Token` requirement on those specific endpoints and add CORS.
 
 ## Development
 
@@ -66,7 +126,7 @@ git clone https://github.com/efdevcon/pretix-eth-payment-plugin-daimo.git
 cd pretix-eth-payment-plugin-daimo
 pip install -e '.[dev]'
 
-# Build frontend
+# Build frontend (WalletConnect checkout UI)
 cd pretix_eth/static/wc_inject
 pnpm install
 pnpm run build   # or: pnpm run watch
@@ -112,4 +172,4 @@ For Devconnect IST an effort was made to improve the plugin in a variety of ways
 
 For Devconnect 2025, the plugin was rewritten to use [Daimo Pay](https://pay.daimo.com), providing any-chain checkout and automatic refunds. See [DIP-64](https://forum.devcon.org/t/dip-64-universal-checkout-for-devcon-nect/5346).
 
-For Devcon 8, Daimo Pay was replaced with direct WalletConnect + on-chain verification, removing all vendor dependencies. Payments are now verified directly via RPC with a SIWE-lite challenge for wallet ownership proof.
+For Devcon 8, the plugin was rebuilt from scratch with two payment modes: direct WalletConnect checkout (user pays gas) and x402 gasless (relayer pays gas for stablecoins). All crypto logic now lives natively in the Pretix plugin — no external database (Supabase retired), no vendor dependency (Daimo Pay removed). Smart wallet support (ERC-1271, ERC-6492, ERC-4337) was added for both payment paths. The devcon-next frontend proxies to the plugin via Pretix API tokens.

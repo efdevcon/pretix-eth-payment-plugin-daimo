@@ -39,3 +39,33 @@ def is_supported(chain_id: int, symbol: str) -> bool:
     if symbol == 'ETH':
         return True  # native available on all chains
     return (chain_id, symbol) in TOKEN_CONTRACTS
+
+
+# EIP-712 domain data for transferWithAuthorization (EIP-3009) signatures.
+# Sourced from devcon src/types/x402.ts GaslessTokenConfig entries.
+TOKEN_CONFIGS = {
+    (1, 'USDC'):      {'eip712Name': 'USD Coin',  'eip712Version': '2'},
+    (10, 'USDC'):     {'eip712Name': 'USD Coin',  'eip712Version': '2'},
+    (10, 'USDT0'):    {'eip712Name': 'USD\u20ae0', 'eip712Version': '1'},
+    (137, 'USDC'):    {'eip712Name': 'USD Coin',  'eip712Version': '2'},
+    (8453, 'USDC'):   {'eip712Name': 'USD Coin',  'eip712Version': '2'},
+    (42161, 'USDC'):  {'eip712Name': 'USD Coin',  'eip712Version': '2'},
+    (42161, 'USDT0'): {'eip712Name': 'USD\u20ae0', 'eip712Version': '1'},
+}
+
+
+def get_eip712_domain(chain_id: int, symbol: str) -> Optional[dict]:
+    """Return the EIP-712 domain for a stablecoin's transferWithAuthorization.
+    Returns None for ETH (no EIP-3009) or unsupported chain/token combos."""
+    if symbol == 'ETH':
+        return None
+    contract = get_token_contract(chain_id, symbol)
+    config = TOKEN_CONFIGS.get((chain_id, symbol))
+    if contract is None or config is None:
+        return None
+    return {
+        'name': config['eip712Name'],
+        'version': config['eip712Version'],
+        'chainId': chain_id,
+        'verifyingContract': contract['address'],
+    }
