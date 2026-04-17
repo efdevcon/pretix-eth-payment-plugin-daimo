@@ -8,7 +8,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('pretix_eth', '0011_x402pendingorder'),
-        ('pretixbase', '0299_alter_customer_locale_alter_user_locale'),
+        ('pretixbase', '0001_initial'),
     ]
 
     operations = [
