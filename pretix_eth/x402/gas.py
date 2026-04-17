@@ -17,7 +17,7 @@ GAS_CAPS_GWEI = {
 }
 
 # Minimum relayer ETH balance (across all chains) to cover gas.
-MIN_RELAYER_BALANCE_WEI = 10**15  # 0.001 ETH
+MIN_RELAYER_BALANCE_WEI = 10**14  # 0.0001 ETH
 
 
 def assert_gas_conditions(*, w3, chain_id: int, relayer_addr: str) -> None:

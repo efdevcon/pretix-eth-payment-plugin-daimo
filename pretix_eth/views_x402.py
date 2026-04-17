@@ -25,6 +25,7 @@ from pretix_eth.x402.balances import fetch_balances_for_wallet
 from pretix_eth.x402.config import resolve_relayer_pk
 from pretix_eth.x402.nonce import generate_nonce_bytes32
 from pretix_eth.x402.pretix_client import create_pretix_order, confirm_x402_payment
+from pretix_eth.x402.gas import GasConditionError
 from pretix_eth.x402.relayer import (
     execute_transfer_with_authorization, RelayerError, RelayerResult,
 )
@@ -804,6 +805,10 @@ def execute_transfer(request):
             relayer_pk=relayer_pk,
             alchemy_key=alchemy_key,
         )
+    except GasConditionError as e:
+        resp = JsonResponse({'success': False, 'error': str(e)}, status=503)
+        resp['Retry-After'] = '30'
+        return resp
     except RelayerError as e:
         return JsonResponse({'success': False, 'error': str(e)}, status=503)
 
